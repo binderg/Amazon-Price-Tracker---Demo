@@ -181,11 +181,22 @@ export function buildPriceUpdateEvent(productId, newPrice) {
  * Default URL settings pre-populated with the mock products.
  * Stored in localStorage under the key "pricewatch_settings".
  */
+/**
+ * Valid scrape intervals in minutes.
+ * Displayed as a locked-step slider in the settings UI.
+ */
+export const INTERVAL_OPTIONS = [
+  { minutes: 15,   label: '15 min' },
+  { minutes: 30,   label: '30 min' },
+  { minutes: 60,   label: '1 hr'   },
+  { minutes: 720,  label: '12 hr'  },
+  { minutes: 1440, label: '24 hr'  },
+]
+
 export const DEFAULT_SETTINGS = {
   slots: [
-    { id: 1, url: MOCK_PRODUCTS[0].url, name: MOCK_PRODUCTS[0].shortName },
-    { id: 2, url: MOCK_PRODUCTS[1].url, name: MOCK_PRODUCTS[1].shortName },
-    { id: 3, url: MOCK_PRODUCTS[2].url, name: MOCK_PRODUCTS[2].shortName },
+    { id: 1, url: MOCK_PRODUCTS[0].url, name: MOCK_PRODUCTS[0].shortName, scrape_interval_minutes: 60 },
+    { id: 2, url: MOCK_PRODUCTS[1].url, name: MOCK_PRODUCTS[1].shortName, scrape_interval_minutes: 60 },
+    { id: 3, url: MOCK_PRODUCTS[2].url, name: MOCK_PRODUCTS[2].shortName, scrape_interval_minutes: 60 },
   ],
-  checkIntervalMinutes: 60,
 }

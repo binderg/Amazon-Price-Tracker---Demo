@@ -19,7 +19,52 @@ import {
   Info,
   X,
 } from 'lucide-react'
-import { parseAsin } from '../../api/mockData'
+import { parseAsin, INTERVAL_OPTIONS } from '../../api/mockData'
+
+// ─── Interval slider ──────────────────────────────────────────────────────────
+
+function IntervalSlider({ value, onChange }) {
+  const currentIndex = INTERVAL_OPTIONS.findIndex((o) => o.minutes === value)
+  const index = currentIndex === -1 ? 2 : currentIndex // default to 1 hr
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-semibold text-slate-700">Check Interval</label>
+        <span className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+          {INTERVAL_OPTIONS[index].label}
+        </span>
+      </div>
+
+      <div className="relative px-1">
+        <input
+          type="range"
+          min={0}
+          max={INTERVAL_OPTIONS.length - 1}
+          step={1}
+          value={index}
+          onChange={(e) => onChange(INTERVAL_OPTIONS[Number(e.target.value)].minutes)}
+          className="w-full h-1.5 appearance-none rounded-full bg-slate-200 cursor-pointer accent-blue-600"
+        />
+        {/* tick labels */}
+        <div className="flex justify-between mt-1.5">
+          {INTERVAL_OPTIONS.map((opt, i) => (
+            <button
+              key={opt.minutes}
+              type="button"
+              onClick={() => onChange(opt.minutes)}
+              className={`text-xs transition-colors ${
+                i === index ? 'text-blue-600 font-semibold' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ─── URL slot editor ──────────────────────────────────────────────────────────
 
@@ -37,7 +82,7 @@ function isValidAmazonUrl(url) {
 }
 
 function UrlSlot({ slot, index, onChange }) {
-  const { url, name } = slot
+  const { url, name, scrape_interval_minutes } = slot
   const asin = parseAsin(url)
   const valid = isValidAmazonUrl(url)
   const hasUrl = url.trim().length > 0
@@ -103,6 +148,12 @@ function UrlSlot({ slot, index, onChange }) {
           </button>
         )}
       </div>
+
+      {/* Interval slider */}
+      <IntervalSlider
+        value={scrape_interval_minutes ?? 60}
+        onChange={(minutes) => onChange({ ...slot, scrape_interval_minutes: minutes })}
+      />
     </div>
   )
 }
