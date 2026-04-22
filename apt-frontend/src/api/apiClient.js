@@ -22,9 +22,16 @@ export const DEMO_MODE = true
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
+const API_KEY  = import.meta.env.VITE_API_KEY ?? ''
+
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+  const res = await fetch(`${API_BASE}/api${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': API_KEY,
+      ...options.headers,
+    },
     ...options,
   })
   if (!res.ok) {
@@ -32,6 +39,14 @@ async function apiFetch(path, options = {}) {
     throw new Error(`API ${options.method ?? 'GET'} ${path} → ${res.status}: ${text}`)
   }
   return res.json()
+}
+
+export function getSseUrl() {
+  return `${API_BASE}/sse`
+}
+
+export function getSseHeaders() {
+  return { 'X-API-Key': API_KEY }
 }
 
 // Artificial delay so mock mode feels realistic (50–150 ms)
@@ -99,6 +114,25 @@ export async function getProductHistory(id, range = {}) {
   if (range.to) params.set('to', range.to)
   const qs = params.toString() ? `?${params}` : ''
   return apiFetch(`/products/${id}/history${qs}`)
+}
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+
+/**
+ * Persists slot configuration to the backend.
+ * Backend syncs tracked_products and calls Scrape.do for new ASINs.
+ * @param {{ slots: import('./mockData').DEFAULT_SETTINGS['slots'] }} settings
+ */
+export async function saveSettingsToBackend(settings) {
+  if (DEMO_MODE) {
+    await mockDelay()
+    console.warn('[Demo] saveSettingsToBackend — no-op in demo mode', settings)
+    return { results: [] }
+  }
+  return apiFetch('/settings', {
+    method: 'POST',
+    body: JSON.stringify({ slots: settings.slots }),
+  })
 }
 
 // ─── Webhooks ────────────────────────────────────────────────────────────────

@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+#db
+apt-backend\data\apt.db-shm
+apt-backend\data\apt.db-wal

@@ -10,41 +10,40 @@ db.run("PRAGMA foreign_keys = ON");
 
 db.run(`
   CREATE TABLE IF NOT EXISTS products (
-    asin             TEXT PRIMARY KEY,
-    brand            TEXT,
-    name             TEXT,
-    url              TEXT,
-    thumbnail        TEXT,
-    currency         TEXT,
-    currency_symbol  TEXT,
+    asin              TEXT PRIMARY KEY,
+    brand             TEXT,
+    name              TEXT,
+    url               TEXT,
+    thumbnail         TEXT,
+    currency          TEXT,
+    currency_symbol   TEXT,
     technical_details TEXT,  -- JSON object
-    created_at       INTEGER NOT NULL DEFAULT (unixepoch()),
-    updated_at       INTEGER NOT NULL DEFAULT (unixepoch())
+    created_at        INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at        INTEGER NOT NULL DEFAULT (unixepoch())
   )
 `);
 
 db.run(`
   CREATE TABLE IF NOT EXISTS tracked_products (
-    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
-    asin                     TEXT NOT NULL REFERENCES products(asin),
-    geocode                  TEXT NOT NULL,
-    zipcode                  TEXT NOT NULL,
-    scrape_interval_minutes  INTEGER NOT NULL DEFAULT 60,
-    last_scraped_at          INTEGER,
-    is_active                INTEGER NOT NULL DEFAULT 1,
-    -- paused_until: unix timestamp; when set and > now(), scraper skips this row
-    -- even if is_active = 1. NULL means no temporary pause in effect.
-    paused_until             INTEGER,
-    created_at               INTEGER NOT NULL DEFAULT (unixepoch()),
-    UNIQUE(asin, geocode, zipcode)
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    asin                    TEXT NOT NULL REFERENCES products(asin),
+    slot                    INTEGER NOT NULL,          -- 1–3 display position
+    geocode                 TEXT NOT NULL DEFAULT 'us',
+    zipcode                 TEXT NOT NULL DEFAULT '10001',
+    scrape_interval_minutes INTEGER NOT NULL DEFAULT 60,
+    last_scraped_at         INTEGER,
+    is_active               INTEGER NOT NULL DEFAULT 1,
+    created_at              INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(asin, geocode, zipcode),
+    UNIQUE(slot)
   )
 `);
 
-// Migrate existing DB: add paused_until if it doesn't exist yet
+// Migration: add slot column if upgrading from an older schema
 try {
-  db.run("ALTER TABLE tracked_products ADD COLUMN paused_until INTEGER");
+  db.run(`ALTER TABLE tracked_products ADD COLUMN slot INTEGER NOT NULL DEFAULT 0`);
 } catch {
-  // Column already exists — safe to ignore
+  // column already exists — ignore
 }
 
 db.run(`
@@ -96,6 +95,14 @@ db.run(`
 db.run(`
   CREATE INDEX IF NOT EXISTS idx_bsr_asin_recorded
     ON best_seller_rankings(asin, recorded_at)
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS webhooks (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    url        TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )
 `);
 
 console.log(`Database ready at ${DB_PATH}`);
