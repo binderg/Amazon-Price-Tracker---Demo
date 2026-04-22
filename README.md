@@ -17,6 +17,7 @@ A full-stack application that monitors Amazon product prices, persists price his
 | Scraping | **Scrape.do Amazon PDP API** | Managed anti-bot / proxy layer; returns structured JSON — no raw HTML parsing |
 | Notifications | **Outbound webhooks** | Consumer registers a URL; system POSTs a structured payload on price drop |
 | Real-time UI | **Server-Sent Events (SSE)** | Push price updates to the browser without polling |
+| Logging | **Pino + pino-pretty** | Structured JSON in production; pretty coloured output in dev |
 | Config | **`.env` + SQLite** | Secrets and scalars in `.env`; product list and alert thresholds managed via DB |
 
 ---
@@ -57,18 +58,20 @@ bun run dev     (apt-frontend)  →  Vite/React on :5173, proxies /api + /sse �
 │   │   ├── db/
 │   │   │   └── index.ts          # SQLite init, schema, migrations
 │   │   ├── middleware/
-│   │   │   └── auth.ts           # API key guard
+│   │   │   ├── auth.ts           # API key guard (header + ?key= query param for SSE)
+│   │   │   └── logger.ts         # HTTP request/response logging middleware
 │   │   ├── routes/
-│   │   │   ├── products.ts       # GET /api/products (with history + alert config)
-│   │   │   ├── settings.ts       # POST /api/settings (upsert slots + thresholds)
+│   │   │   ├── products.ts       # GET /api/products, PATCH /api/products/:id/active
+│   │   │   ├── settings.ts       # GET /api/settings, POST /api/settings
+│   │   │   ├── alerts.ts         # GET /api/alerts (price_drop_events)
 │   │   │   ├── webhooks.ts       # GET/POST/DELETE /api/webhooks
 │   │   │   └── sse.ts            # GET /sse (EventSource stream)
-│   │   └── services/
-│   │       ├── amazon.ts         # Scrape.do Amazon PDP API client
-│   │       ├── scheduler.ts      # TODO: setInterval price check loop
-│   │       ├── detector.ts       # TODO: price drop comparison logic
-│   │       ├── notifier.ts       # TODO: outbound webhook delivery
-│   │       └── logger.ts         # TODO: structured JSON logger
+│   │   ├── services/
+│   │   │   ├── amazon.ts         # Scrape.do Amazon PDP API client
+│   │   │   ├── scheduler.ts      # TODO: setInterval price check loop
+│   │   │   ├── detector.ts       # TODO: price drop comparison logic
+│   │   │   └── notifier.ts       # TODO: outbound webhook delivery
+│   │   └── logger.ts             # Pino singleton + named child loggers per module
 │   ├── data/
 │   │   └── apt.db                # SQLite database (git-ignored)
 │   ├── .env                      # Local secrets (git-ignored)
@@ -80,15 +83,17 @@ bun run dev     (apt-frontend)  →  Vite/React on :5173, proxies /api + /sse �
 │   │   ├── App.jsx               # Root — wires PrimeReact, Toast, SSE, Settings
 │   │   ├── api/
 │   │   │   ├── apiClient.js      # All API calls; DEMO_MODE flag for offline dev
-│   │   │   └── mockData.js       # Seeded mock products + helpers
+│   │   │   └── mockData.js       # Seeded mock products + helpers (demo mode only)
 │   │   ├── components/
-│   │   │   ├── dashboard/        # Dashboard, ProductGrid, ProductCard, PriceHistoryChart, StatsBar
+│   │   │   ├── alerts/           # AlertsColumn, AlertItem (live + persisted drop events)
+│   │   │   ├── dashboard/        # Dashboard, ProductGrid, ProductCard, charts, StatsBar
 │   │   │   ├── layout/           # Header (SSE badge, refresh, settings button)
 │   │   │   └── settings/         # SettingsModal (slots + alert thresholds)
 │   │   └── hooks/
-│   │       ├── usePriceData.js   # Loads products, applies SSE updates
-│   │       ├── useSettings.js    # Persists slot config to localStorage
-│   │       └── useSSE.js         # EventSource wrapper; simulates events in demo mode
+│   │       ├── usePriceData.js   # Loads products from API, applies SSE updates
+│   │       ├── useSettings.js    # Syncs slot config with backend DB + localStorage
+│   │       ├── useAlerts.js      # Loads price_drop_events from API; SSE prepends live alerts
+│   │       └── useSSE.js         # EventSource wrapper (?key= auth); demo mode simulation
 │   ├── .env.example
 │   └── package.json
 │
@@ -218,11 +223,25 @@ Returns all active tracked products joined with their latest price snapshot,
 
 ### Settings
 ```
+GET  /api/settings
+```
+Returns the current 3-slot configuration from the DB. Empty slots are filled with defaults so
+the frontend always receives a full 3-element array.
+
+```
 POST /api/settings
 Body: { slots: [{ id, url, name?, scrape_interval_minutes?, geocode?, zipcode?,
                   alert_enabled?, threshold_mode?, threshold_percent?, threshold_absolute? }] }
 ```
-Upserts products and tracked slots. Calls Scrape.do to seed first snapshot on new ASINs.
+Upserts products and tracked slots. Calls Scrape.do to seed the first price snapshot on new
+ASINs. Empty `url` deactivates the slot while preserving its history.
+
+### Alerts
+```
+GET  /api/alerts
+```
+Returns the 50 most recent rows from `price_drop_events`, joined with product name and URL.
+Each entry is shaped to match the `AlertItem` component directly.
 
 ### Webhooks
 ```
@@ -236,16 +255,14 @@ DELETE /api/webhooks/:id
 POST /api/check          Runs a full check cycle immediately
 ```
 
-### Alerts — *TODO*
+### SSE
 ```
-GET  /api/alerts         Recent price_drop_events, ?asin= filter supported
+GET  /sse?key=<API_KEY>  EventSource stream
 ```
+The API key is passed as a query param because browser `EventSource` cannot set custom headers.
+Currently emits `connected` on open and `: ping` keep-alives every 30 s.
 
-### SSE — *partial*
-```
-GET  /sse                EventSource stream; currently emits connected + ping
-```
-Planned events:
+Planned events (added with the scheduler service):
 ```
 event: price_update  data: { product_id, current_price, checked_at }
 event: price_drop    data: { product_id, product_name, asin, previous_price, current_price,
@@ -289,6 +306,9 @@ DROP_THRESHOLD_ABSOLUTE=0
 
 PORT=3000
 FRONTEND_ORIGIN=http://localhost:5173
+
+# Logging — trace | debug | info | warn | error | fatal
+# Defaults: debug in development, info in production
 LOG_LEVEL=info
 ```
 
@@ -346,22 +366,79 @@ without a licensed intermediary conflicts with Amazon's Conditions of Use.
 
 ## Logging
 
-Structured JSON emitted via the logger service. Every entry includes:
+Structured logging is implemented with **[Pino](https://getpino.io)** + **pino-pretty**.
 
-```json
-{
-  "timestamp": "2026-04-22T14:00:01Z",
-  "level": "info",
-  "event": "price_check",
-  "product_id": 1,
-  "asin": "B09XS7JWHH",
-  "geocode": "us",
-  "price": 279.99,
-  "success": true
-}
+### Output format
+
+| Environment | Format | How |
+|---|---|---|
+| Development (`NODE_ENV` ≠ `production`) | Coloured, human-readable via pino-pretty | Automatic |
+| Production | Newline-delimited JSON to stdout | Pipe to any log aggregator |
+
+Development output looks like:
+```
+18:42:03.412  INFO  db › database ready  path=".../data/apt.db"
+18:42:03.415  INFO  http › apt-backend listening on :3000  port=3000 env=development
+18:42:05.120  DEBUG http › → request  reqId=req-1 method=GET path=/api/products
+18:42:05.131  INFO  http › ← 200  reqId=req-1 method=GET path=/api/products status=200 ms=11
+18:42:09.880  INFO  scrape › scrape started  asin=B09XS7JWHH geocode=us zipcode=10001
+18:42:11.203  INFO  scrape › scrape completed  asin=B09XS7JWHH ms=1323 price=279.99 name="Sony WH-1000XM5..."
+18:42:11.210  INFO  settings › product added and seeded  slot=1 asin=B09XS7JWHH price=279.99 interval=60
+18:42:11.214  INFO  settings › settings save completed  summary={added:1,updated:0,cleared:2}
 ```
 
-Events: `scheduler_tick` · `price_check` · `price_drop` · `webhook_delivery` · `webhook_failure`
+### Modules and child loggers
+
+Each module imports its own named child logger from `src/logger.ts`, so every line carries a
+`module` field you can filter on:
+
+| Logger | Module tag | Used in |
+|---|---|---|
+| `httpLog` | `http` | Request/response middleware |
+| `scrapeLog` | `scrape` | `services/amazon.ts` |
+| `settingsLog` | `settings` | `routes/settings.ts` |
+| `productsLog` | `products` | `routes/products.ts` |
+| `alertsLog` | `alerts` | `routes/alerts.ts` |
+| `webhooksLog` | `webhooks` | `routes/webhooks.ts` |
+| `sseLog` | `sse` | `routes/sse.ts` |
+| `dbLog` | `db` | `db/index.ts` |
+
+### What gets logged
+
+| Event | Level | Key fields |
+|---|---|---|
+| Server start | `info` | `port`, `env`, `logLevel`, `frontendOrigin` |
+| DB ready | `info` | `path` |
+| Every HTTP request in | `debug` | `reqId`, `method`, `path`, `ua` |
+| Every HTTP response | `info/warn/error` | `reqId`, `status`, `ms`, `bytes` |
+| SSE connect / disconnect | `info` | `reqId`, `path` |
+| Scrape started | `info` | `asin`, `geocode`, `zipcode` |
+| Scrape completed | `info` | `asin`, `ms`, `price`, `name`, `rating` |
+| Scrape network error | `error` | `asin`, `err` |
+| Scrape HTTP/API error | `error` | `asin`, `status`, `errorMessage`, `ms` |
+| Settings save started | `info` | `totalSlots`, `slotsWithUrls` |
+| Slot cleared | `info` | `slot` |
+| New product seeded | `info` | `slot`, `asin`, `name`, `price`, `interval` |
+| Product settings updated | `info` | `slot`, `asin`, `interval`, `alertEnabled`, `thresholdMode` |
+| Slot processing error | `error` | `slot`, `asin`, `err` |
+| Settings save completed | `info` | `summary` (e.g. `{added:1, updated:1, cleared:1}`) |
+| Product active toggled | `info` | `id`, `active` |
+| Webhook registered | `info` | `id`, `url` |
+| Webhook deleted | `info` | `id` |
+| Unhandled error | `error` | `err`, `stack`, `url` |
+
+### Configuration
+
+Set `LOG_LEVEL` in `.env` to control verbosity:
+
+```env
+LOG_LEVEL=debug    # trace | debug | info | warn | error | fatal
+```
+
+Defaults: `debug` in development, `info` in production.
+
+Sensitive values (`x-api-key`, `SCRAPE_DO_TOKEN`, etc.) are automatically **redacted** in all
+log output via Pino's built-in `redact` option.
 
 ---
 

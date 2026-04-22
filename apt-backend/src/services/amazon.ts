@@ -1,3 +1,5 @@
+import { scrapeLog } from "../logger";
+
 const SCRAPE_DO_TOKEN = process.env.SCRAPE_DO_TOKEN;
 const BASE_URL = "https://api.scrape.do/plugin/amazon/pdp";
 
@@ -48,22 +50,50 @@ export async function getProductDetails(
     url.searchParams.set("include_html", "true");
   }
 
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-    },
-  });
+  const log = scrapeLog.child({ asin, geocode, zipcode });
+  log.info("scrape started");
+  const start = performance.now();
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+  } catch (err: any) {
+    log.error({ err: err.message }, "scrape network error");
+    throw err;
+  }
+
+  const ms = Math.round(performance.now() - start);
 
   if (!response.ok) {
+    log.error(
+      { status: response.status, statusText: response.statusText, ms },
+      "scrape HTTP error"
+    );
     throw new Error(`Scrape.do API error: ${response.status} ${response.statusText}`);
   }
 
   const data: AmazonProduct = await response.json();
 
   if (data.status === "error") {
+    log.error({ errorMessage: data.errorMessage, ms }, "scrape API returned error status");
     throw new Error(data.errorMessage || "Unknown API error");
   }
+
+  log.info(
+    {
+      ms,
+      name: data.name?.slice(0, 60),
+      price: data.price,
+      currency: data.currency,
+      is_prime: data.is_prime,
+      rating: data.rating,
+      total_ratings: data.total_ratings,
+    },
+    "scrape completed"
+  );
 
   return data;
 }

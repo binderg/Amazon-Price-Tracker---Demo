@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { apiKeyAuth } from "./middleware/auth";
+import { requestLogger } from "./middleware/logger";
+import { logger } from "./logger";
 import products from "./routes/products";
 import settings from "./routes/settings";
 import webhooks from "./routes/webhooks";
@@ -11,6 +13,9 @@ import sse from "./routes/sse";
 import "./db/index";
 
 const app = new Hono();
+
+// ─── Request logging ──────────────────────────────────────────────────────────
+app.use("*", requestLogger);
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 // Allow the Vite dev server and any configured frontend origin
@@ -43,12 +48,22 @@ app.notFound((c) => c.json({ error: "Not found" }, 404));
 
 // ─── Global error handler ─────────────────────────────────────────────────────
 app.onError((err, c) => {
-  console.error("[error]", err);
+  logger.error({ err: err.message, stack: err.stack, url: c.req.url }, "unhandled error");
   return c.json({ error: "Internal server error" }, 500);
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT ?? 3000);
+
+logger.info(
+  {
+    port: PORT,
+    env: process.env.NODE_ENV ?? "development",
+    logLevel: process.env.LOG_LEVEL ?? "debug",
+    frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
+  },
+  `apt-backend listening on :${PORT}`
+);
 
 export default {
   port: PORT,

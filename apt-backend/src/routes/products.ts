@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { db } from "../db/index";
+import { productsLog } from "../logger";
 
 const products = new Hono();
 
@@ -41,6 +42,7 @@ interface HistoryRow {
  * and up to 60 days of price history.
  */
 products.get("/", (c) => {
+  productsLog.debug("fetching all active products with history");
   const rows = db
     .query<TrackedRow, []>(`
       SELECT
@@ -129,6 +131,10 @@ products.get("/", (c) => {
     };
   });
 
+  productsLog.debug(
+    { count: result.length, asins: result.map((p) => p.asin) },
+    "products fetched"
+  );
   return c.json(result);
 });
 
@@ -157,8 +163,12 @@ products.patch("/:id/active", async (c) => {
     [body.active ? 1 : 0, id]
   );
 
-  if (info.changes === 0) return c.json({ error: "Product not found" }, 404);
+  if (info.changes === 0) {
+    productsLog.warn({ id }, "toggle active: product not found");
+    return c.json({ error: "Product not found" }, 404);
+  }
 
+  productsLog.info({ id, active: body.active }, "product active state toggled");
   return c.json({ id, active: body.active });
 });
 

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { db } from "../db/index";
+import { alertsLog } from "../logger";
 
 const alerts = new Hono();
 
@@ -26,6 +27,7 @@ interface AlertRow {
  * Shape matches the alert object consumed by AlertItem.jsx.
  */
 alerts.get("/", (c) => {
+  alertsLog.debug("fetching recent price-drop alerts");
   const rows = db
     .query<AlertRow, []>(`
       SELECT
@@ -65,6 +67,7 @@ alerts.get("/", (c) => {
     timestamp: new Date(r.detected_at * 1000).toISOString(),
   }));
 
+  alertsLog.debug({ count: result.length }, "alerts fetched");
   return c.json(result);
 });
 

@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import path from "path";
+import { dbLog } from "../logger";
 
 const DB_PATH = path.resolve(import.meta.dir, "../../data/apt.db");
 
@@ -141,4 +142,4 @@ db.run(`
     ON price_drop_events(asin, detected_at)
 `);
 
-console.log(`Database ready at ${DB_PATH}`);
+dbLog.info({ path: DB_PATH }, "database ready");

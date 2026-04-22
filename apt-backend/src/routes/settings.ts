@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { db } from "../db/index";
 import { getProductDetails } from "../services/amazon";
+import { settingsLog } from "../logger";
 
 const settings = new Hono();
 
@@ -43,6 +44,7 @@ interface SettingsRow {
  * Empty slots are filled with defaults so the frontend always gets 3 rows.
  */
 settings.get("/", (c) => {
+  settingsLog.debug("fetching slot configuration");
   const rows = db
     .query<SettingsRow, []>(`
       SELECT
@@ -96,6 +98,7 @@ settings.get("/", (c) => {
     };
   });
 
+  settingsLog.debug({ activeSlots: rows.length }, "slot configuration fetched");
   return c.json({ slots });
 });
 
@@ -123,6 +126,9 @@ settings.post("/", async (c) => {
     return c.json({ error: "slots array is required" }, 400);
   }
 
+  const slotsWithUrls = slots.filter((s) => s.url?.trim()).length;
+  settingsLog.info({ totalSlots: slots.length, slotsWithUrls }, "settings save started");
+
   const results: { slot: number; status: string; asin?: string; error?: string }[] = [];
 
   for (const slot of slots) {
@@ -136,18 +142,22 @@ settings.post("/", async (c) => {
     const thresholdPercent = slot.threshold_percent ?? Number(process.env.DROP_THRESHOLD_PERCENT ?? 5);
     const thresholdAbsolute = slot.threshold_absolute ?? Number(process.env.DROP_THRESHOLD_ABSOLUTE ?? 0);
 
+    const slotLog = settingsLog.child({ slot: slotNum });
+
     // Empty URL → deactivate whatever was in this slot
     if (!url) {
       db.run(
         `UPDATE tracked_products SET is_active = 0 WHERE slot = ?`,
         [slotNum]
       );
+      slotLog.info("slot cleared (no URL)");
       results.push({ slot: slotNum, status: "cleared" });
       continue;
     }
 
     const asin = parseAsin(url);
     if (!asin) {
+      slotLog.warn({ url }, "could not parse ASIN from URL");
       results.push({ slot: slotNum, status: "error", error: "Could not parse ASIN from URL" });
       continue;
     }
@@ -161,6 +171,7 @@ settings.post("/", async (c) => {
         .get(asin, geocode, zipcode);
 
       if (!existing) {
+        slotLog.info({ asin, geocode, zipcode, interval }, "new product — fetching from Scrape.do");
         // First time seeing this product — fetch from Scrape.do to seed data
         const data = await getProductDetails(asin, geocode, zipcode);
 
@@ -238,6 +249,10 @@ settings.post("/", async (c) => {
           );
         }
 
+        slotLog.info(
+          { asin, name: data.name?.slice(0, 60), price: data.price, interval },
+          "product added and seeded"
+        );
         results.push({ slot: slotNum, status: "added", asin });
       } else {
         // Already tracked — update settings including alert thresholds
@@ -265,12 +280,20 @@ settings.post("/", async (c) => {
           ]);
         }
 
+        slotLog.info({ asin, interval, alertEnabled, thresholdMode }, "product settings updated");
         results.push({ slot: slotNum, status: "updated", asin });
       }
     } catch (err: any) {
+      slotLog.error({ asin, err: err.message }, "failed to process slot");
       results.push({ slot: slotNum, status: "error", asin, error: err.message });
     }
   }
+
+  const summary = results.reduce<Record<string, number>>((acc, r) => {
+    acc[r.status] = (acc[r.status] ?? 0) + 1;
+    return acc;
+  }, {});
+  settingsLog.info({ summary, results }, "settings save completed");
 
   return c.json({ results });
 });
