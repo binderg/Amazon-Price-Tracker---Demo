@@ -13,6 +13,7 @@ import Dashboard from './components/dashboard/Dashboard'
 import SettingsModal from './components/settings/SettingsModal'
 import { usePriceData } from './hooks/usePriceData'
 import { useSettings } from './hooks/useSettings'
+import { useAlerts } from './hooks/useAlerts'
 import { formatPrice } from './api/mockData'
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
   const toastRef = useRef(null)
 
   const { settings, saveSettings } = useSettings()
+  const { alerts, addAlert, dismissAlert } = useAlerts()
 
   // Handle price-drop events from SSE / usePriceData
   const handlePriceDrop = useCallback(
@@ -30,8 +32,9 @@ export default function App() {
         detail: `${dropEvent.product_name ?? 'A product'} dropped to ${formatPrice(dropEvent.current_price)} (−${formatPrice(dropEvent.drop_amount)})`,
         life: 6000,
       })
+      addAlert(dropEvent)
     },
-    [],
+    [addAlert],
   )
 
   const { products, loading, error, lastUpdated, sseStatus, refresh, togglePause } = usePriceData({
@@ -66,6 +69,8 @@ export default function App() {
             error={error}
             onSettingsClick={() => setSettingsOpen(true)}
             onTogglePause={togglePause}
+            alerts={alerts}
+            onDismissAlert={dismissAlert}
           />
         </main>
 

@@ -10,6 +10,7 @@ import { useState } from 'react'
 import StatsBar from './StatsBar'
 import ProductGrid from './ProductGrid'
 import ProductDetailModal from './ProductDetailModal'
+import AlertsColumn from '../alerts/AlertsColumn'
 
 /**
  * @param {{
@@ -17,9 +18,20 @@ import ProductDetailModal from './ProductDetailModal'
  *   loading: boolean;
  *   error: string | null;
  *   onSettingsClick: () => void;
+ *   onTogglePause: (product: object) => void;
+ *   alerts: object[];
+ *   onDismissAlert: (id: string) => void;
  * }} props
  */
-export default function Dashboard({ products, loading, error, onSettingsClick, onTogglePause }) {
+export default function Dashboard({
+  products,
+  loading,
+  error,
+  onSettingsClick,
+  onTogglePause,
+  alerts = [],
+  onDismissAlert,
+}) {
   const [selectedProduct, setSelectedProduct] = useState(null)
 
   return (
@@ -39,17 +51,27 @@ export default function Dashboard({ products, loading, error, onSettingsClick, o
         </div>
       )}
 
-      {/* Summary stats */}
+      {/* Summary stats (full width) */}
       <StatsBar products={products} loading={loading} />
 
-      {/* Product cards */}
-      <ProductGrid
-        products={products}
-        loading={loading}
-        onViewHistory={setSelectedProduct}
-        onSettingsClick={onSettingsClick}
-        onTogglePause={onTogglePause}
-      />
+      {/* Two-column layout: product grid + alerts sidebar */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* Product cards — grows to fill available space */}
+        <div className="flex-1 min-w-0">
+          <ProductGrid
+            products={products}
+            loading={loading}
+            onViewHistory={setSelectedProduct}
+            onSettingsClick={onSettingsClick}
+            onTogglePause={onTogglePause}
+          />
+        </div>
+
+        {/* Alerts sidebar — fixed width on large screens, full width on mobile */}
+        <div className="w-full lg:w-72 flex-shrink-0">
+          <AlertsColumn alerts={alerts} onDismiss={onDismissAlert} />
+        </div>
+      </div>
 
       {/* Detail modal */}
       <ProductDetailModal
