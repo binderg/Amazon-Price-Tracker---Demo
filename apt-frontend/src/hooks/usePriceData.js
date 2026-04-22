@@ -102,6 +102,16 @@ export function usePriceData({ onPriceDrop } = {}) {
 
   const { status: sseStatus } = useSSE({ onPriceDrop: handleSSEEvent })
 
+  // Filter the product list to only slots that have a URL configured.
+  // Called synchronously after settings are saved so cleared slots vanish immediately.
+  const applySettingsFilter = useCallback((settings) => {
+    if (!settings?.slots) return
+    const activeSlotIds = new Set(
+      settings.slots.filter((s) => s.url?.trim()).map((s) => s.id)
+    )
+    setProducts((prev) => prev.filter((p) => activeSlotIds.has(p.slot)))
+  }, [])
+
   // Optimistically toggle a product's active state; rolls back on API error
   const togglePause = useCallback(async (product) => {
     const next = !product.active
@@ -128,5 +138,6 @@ export function usePriceData({ onPriceDrop } = {}) {
     sseStatus,
     refresh: load,
     togglePause,
+    applySettingsFilter,
   }
 }

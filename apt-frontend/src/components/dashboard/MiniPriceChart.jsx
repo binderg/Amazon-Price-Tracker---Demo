@@ -33,7 +33,7 @@ export default function MiniPriceChart({ history = [], trend = 'flat' }) {
 
   if (slice.length < 2) {
     return (
-      <div className="h-14 flex items-center justify-center text-xs text-slate-300 italic">
+      <div className="h-10 flex items-center justify-center text-xs text-slate-300 italic">
         Not enough data
       </div>
     )
@@ -45,7 +45,7 @@ export default function MiniPriceChart({ history = [], trend = 'flat' }) {
     trend === 'down' ? '#dcfce7' : trend === 'up' ? '#fee2e2' : '#dbeafe'
 
   return (
-    <div className="h-14 w-full">
+    <div className="h-10 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={slice} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
           <defs>

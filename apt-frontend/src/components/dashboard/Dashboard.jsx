@@ -11,6 +11,7 @@ import StatsBar from './StatsBar'
 import ProductGrid from './ProductGrid'
 import ProductDetailModal from './ProductDetailModal'
 import AlertsColumn from '../alerts/AlertsColumn'
+import ComparisonChart from './ComparisonChart'
 
 /**
  * @param {{
@@ -72,6 +73,11 @@ export default function Dashboard({
           <AlertsColumn alerts={alerts} onDismiss={onDismissAlert} />
         </div>
       </div>
+
+      {/* Comparison chart */}
+      {!loading && products.length > 0 && (
+        <ComparisonChart products={products} />
+      )}
 
       {/* Detail modal */}
       <ProductDetailModal

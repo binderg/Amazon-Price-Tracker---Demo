@@ -15,6 +15,7 @@ import { usePriceData } from './hooks/usePriceData'
 import { useSettings } from './hooks/useSettings'
 import { useAlerts } from './hooks/useAlerts'
 import { formatPrice } from './api/mockData'
+import { saveSettingsToBackend } from './api/apiClient'
 
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -37,9 +38,27 @@ export default function App() {
     [addAlert],
   )
 
-  const { products, loading, error, lastUpdated, sseStatus, refresh, togglePause } = usePriceData({
-    onPriceDrop: handlePriceDrop,
-  })
+  const {
+    products,
+    loading,
+    error,
+    lastUpdated,
+    sseStatus,
+    refresh,
+    togglePause,
+    applySettingsFilter,
+  } = usePriceData({ onPriceDrop: handlePriceDrop })
+
+  // Combined save: persist to localStorage, immediately filter product list,
+  // and POST to backend when not in demo mode.
+  const handleSaveSettings = useCallback(
+    async (newSettings) => {
+      saveSettings(newSettings)
+      applySettingsFilter(newSettings)
+      try { await saveSettingsToBackend(newSettings) } catch { /* no-op in demo */ }
+    },
+    [saveSettings, applySettingsFilter],
+  )
 
   const [refreshing, setRefreshing] = useState(false)
 
@@ -86,7 +105,7 @@ export default function App() {
         visible={settingsOpen}
         onHide={() => setSettingsOpen(false)}
         settings={settings}
-        onSave={saveSettings}
+        onSave={handleSaveSettings}
       />
     </PrimeReactProvider>
   )

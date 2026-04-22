@@ -125,5 +125,8 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
 - [x] `usePriceData` + `useSSE` hooks (with demo-mode simulation)
 - [x] `SettingsModal` — stacked rows, wide URL input, per-product alert threshold UI
 - [x] Pause / Resume button on `ProductCard` (optimistic toggle via `usePriceData.togglePause`)
+- [x] Settings clear/delete wired correctly — cleared URL slots immediately remove product card via `applySettingsFilter`
+- [x] `ComparisonChart` below product grid — multi-product line chart with PrimeReact MultiSelect + range toggle
+- [x] Mini sparklines on product cards shrunk to `h-10`
 - [x] `.env.example` with all config fields documented
 - [x] README rewritten to match actual codebase

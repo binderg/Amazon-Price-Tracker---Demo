@@ -1,5 +1,28 @@
-@import "tailwindcss";
+/* ── Layer order ────────────────────────────────────────────────────────────────
+   Establish priority before any imports.
+     1. tailwind-base      – Tailwind preflight (resets)       ← lowest
+     2. primereact         – PrimeReact theme                  ← overrides reset
+     3. tailwind-utilities – Tailwind utilities / components   ← highest
+   This stops preflight from zeroing PrimeReact borders/padding while still
+   letting utility classes win when you need them to.
+────────────────────────────────────────────────────────────────────────────── */
+/* Declare layer priority order FIRST.
+   tailwind-base (preflight) < primereact (theme) < tailwind-utilities (utilities)
+   Vite styled mode: theme is imported plain (no layer wrapper) — Next.js is the
+   one that needs layer(primereact). The order declaration is what controls it. */
+@layer tailwind-base, primereact, tailwind-utilities;
 
+/* VITE styled mode: plain import, no layer() wrapper */
+@import "primereact/resources/themes/lara-light-cyan/theme.css";
+
+/* Tailwind v4 equivalent of @layer tailwind-base { @tailwind base; } */
+@import "tailwindcss/preflight" layer(tailwind-base);
+
+/* Tailwind v4 equivalent of @layer tailwind-utilities { @tailwind components; @tailwind utilities; } */
+@import "tailwindcss/theme"     layer(tailwind-utilities);
+@import "tailwindcss/utilities" layer(tailwind-utilities);
+
+/* ── Global base ─────────────────────────────────────────────────────────────── */
 @layer base {
   *, *::before, *::after {
     box-sizing: border-box;
@@ -27,7 +50,7 @@
   }
 }
 
-/* PrimeReact scoped overrides */
+/* ── PrimeReact component tweaks ─────────────────────────────────────────────── */
 @layer components {
   .p-dialog .p-dialog-header {
     border-bottom: 1px solid #e2e8f0;
@@ -41,20 +64,6 @@
   .p-dialog .p-dialog-footer {
     border-top: 1px solid #e2e8f0;
     padding: 1rem 1.5rem;
-  }
-
-  .p-inputtext {
-    width: 100%;
-    border-radius: 0.5rem !important;
-    border-color: #cbd5e1 !important;
-    font-size: 0.875rem !important;
-    font-family: inherit !important;
-  }
-
-  .p-inputtext:focus {
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
-    outline: none !important;
   }
 
   .p-toast {
