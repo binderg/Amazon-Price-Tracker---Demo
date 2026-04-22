@@ -3,22 +3,25 @@
  *
  * All backend API calls are centralised here.
  * When DEMO_MODE is true (no backend), every function resolves mock data.
- * Flip DEMO_MODE to false and ensure the Hono server is running on :3001
+ * Flip DEMO_MODE to false and ensure the Hono server is running on :3000
  * to use the real API.
  *
- * API contract mirrors the Hono backend defined in README.md:
+ * API contract:
  *   GET    /api/products
- *   POST   /api/products            { url, name? }
- *   DELETE /api/products/:id
+ *   PATCH  /api/products/:id/active  { active: boolean }
  *   GET    /api/products/:id/history?from=&to=
+ *   GET    /api/settings
+ *   POST   /api/settings             { slots: Slot[] }
+ *   GET    /api/alerts
  *   GET    /api/webhooks
- *   POST   /api/webhooks            { url }
+ *   POST   /api/webhooks             { url }
  *   DELETE /api/webhooks/:id
+ *   GET    /sse                      (EventSource, key via ?key=)
  */
 
-import { MOCK_PRODUCTS } from './mockData'
+import { MOCK_PRODUCTS, DEFAULT_SETTINGS } from './mockData'
 
-export const DEMO_MODE = true
+export const DEMO_MODE = false
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -41,8 +44,11 @@ async function apiFetch(path, options = {}) {
   return res.json()
 }
 
+/**
+ * SSE URL with API key as a query param because EventSource cannot set headers.
+ */
 export function getSseUrl() {
-  return `${API_BASE}/sse`
+  return `${API_BASE}/sse?key=${encodeURIComponent(API_KEY)}`
 }
 
 export function getSseHeaders() {
@@ -135,6 +141,18 @@ export async function getProductHistory(id, range = {}) {
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 /**
+ * Fetches the current slot configuration from the backend DB.
+ * @returns {Promise<{ slots: object[] }>}
+ */
+export async function getSettings() {
+  if (DEMO_MODE) {
+    await mockDelay()
+    return DEFAULT_SETTINGS
+  }
+  return apiFetch('/settings')
+}
+
+/**
  * Persists slot configuration to the backend.
  * Backend syncs tracked_products and calls Scrape.do for new ASINs.
  * @param {{ slots: import('./mockData').DEFAULT_SETTINGS['slots'] }} settings
@@ -149,6 +167,21 @@ export async function saveSettingsToBackend(settings) {
     method: 'POST',
     body: JSON.stringify({ slots: settings.slots }),
   })
+}
+
+// ─── Alerts ──────────────────────────────────────────────────────────────────
+
+/**
+ * Fetches recent price-drop alerts from the backend (price_drop_events table).
+ * Returns an empty array in demo mode so seed alerts are used instead.
+ * @returns {Promise<object[]>}
+ */
+export async function getAlerts() {
+  if (DEMO_MODE) {
+    await mockDelay()
+    return []
+  }
+  return apiFetch('/alerts')
 }
 
 // ─── Webhooks ────────────────────────────────────────────────────────────────

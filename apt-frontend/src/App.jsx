@@ -49,15 +49,21 @@ export default function App() {
     applySettingsFilter,
   } = usePriceData({ onPriceDrop: handlePriceDrop })
 
-  // Combined save: persist to localStorage, immediately filter product list,
-  // and POST to backend when not in demo mode.
+  // Combined save: persist to localStorage, POST to backend,
+  // then refresh the product list so newly-added products appear immediately.
   const handleSaveSettings = useCallback(
     async (newSettings) => {
       saveSettings(newSettings)
       applySettingsFilter(newSettings)
-      try { await saveSettingsToBackend(newSettings) } catch { /* no-op in demo */ }
+      try {
+        await saveSettingsToBackend(newSettings)
+        // Refresh product data after backend has processed the new slots
+        await refresh()
+      } catch {
+        /* no-op in demo or on network error */
+      }
     },
-    [saveSettings, applySettingsFilter],
+    [saveSettings, applySettingsFilter, refresh],
   )
 
   const [refreshing, setRefreshing] = useState(false)
@@ -95,8 +101,8 @@ export default function App() {
 
         <footer className="border-t border-slate-200 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between text-xs text-slate-400">
-            <span>PriceWatch &mdash; Demo</span>
-            <span>Data simulated &mdash; no real Amazon requests are made</span>
+            <span>PriceWatch</span>
+            <span>Live data &mdash; prices fetched from Amazon via Scrape.do</span>
           </div>
         </footer>
       </div>

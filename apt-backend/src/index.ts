@@ -4,6 +4,7 @@ import { apiKeyAuth } from "./middleware/auth";
 import products from "./routes/products";
 import settings from "./routes/settings";
 import webhooks from "./routes/webhooks";
+import alerts from "./routes/alerts";
 import sse from "./routes/sse";
 
 // Import DB so tables are created on startup
@@ -20,7 +21,7 @@ app.use(
   cors({
     origin: (origin) => (allowedOrigins.includes(origin) ? origin : allowedOrigins[0]),
     allowHeaders: ["Content-Type", "X-API-Key"],
-    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   })
 );
 
@@ -33,6 +34,7 @@ app.use("/sse", apiKeyAuth);
 
 app.route("/api/products", products);
 app.route("/api/settings", settings);
+app.route("/api/alerts", alerts);
 app.route("/api/webhooks", webhooks);
 app.route("/sse", sse);
 

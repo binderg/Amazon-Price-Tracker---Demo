@@ -1,7 +1,8 @@
 import { createMiddleware } from "hono/factory";
 
 export const apiKeyAuth = createMiddleware(async (c, next) => {
-  const key = c.req.header("x-api-key");
+  // Accept key from header (REST) or query param (SSE — EventSource can't set headers)
+  const key = c.req.header("x-api-key") ?? c.req.query("key");
   const expected = process.env.API_KEY;
 
   if (!expected) {

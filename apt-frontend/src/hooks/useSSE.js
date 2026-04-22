@@ -17,10 +17,8 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { DEMO_MODE } from '../api/apiClient'
+import { DEMO_MODE, getSseUrl } from '../api/apiClient'
 import { MOCK_PRODUCTS } from '../api/mockData'
-
-const SSE_URL = '/sse'
 
 // How often the demo simulates a new price event (ms)
 const DEMO_TICK_MS = 30_000
@@ -82,7 +80,8 @@ export function useSSE({ onPriceDrop: onEvent } = {}) {
     }
 
     // ── Production mode: real EventSource ────────────────────────────────────
-    const es = new EventSource(SSE_URL)
+    // API key is appended as ?key= because EventSource cannot set custom headers.
+    const es = new EventSource(getSseUrl())
     esRef.current = es
     setStatus('connecting')
 

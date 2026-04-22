@@ -23,6 +23,82 @@ function parseAsin(url: string): string | null {
   return match ? match[1].toUpperCase() : null;
 }
 
+interface SettingsRow {
+  id: number;
+  slot: number;
+  url: string | null;
+  name: string | null;
+  scrape_interval_minutes: number;
+  alert_enabled: number;
+  threshold_mode: string;
+  threshold_percent: number;
+  threshold_absolute: number;
+  geocode: string;
+  zipcode: string;
+}
+
+/**
+ * GET /api/settings
+ * Returns all 3 slot configurations from the DB (active only).
+ * Empty slots are filled with defaults so the frontend always gets 3 rows.
+ */
+settings.get("/", (c) => {
+  const rows = db
+    .query<SettingsRow, []>(`
+      SELECT
+        tp.id,
+        tp.slot,
+        p.url,
+        p.name,
+        tp.scrape_interval_minutes,
+        tp.alert_enabled,
+        tp.threshold_mode,
+        tp.threshold_percent,
+        tp.threshold_absolute,
+        tp.geocode,
+        tp.zipcode
+      FROM tracked_products tp
+      LEFT JOIN products p ON p.asin = tp.asin
+      WHERE tp.is_active = 1
+      ORDER BY tp.slot ASC
+    `)
+    .all();
+
+  // Build a map of slot → row, then fill 3 slots
+  const bySlot = new Map(rows.map((r) => [r.slot, r]));
+  const slots = [1, 2, 3].map((slotNum) => {
+    const row = bySlot.get(slotNum);
+    if (row) {
+      return {
+        id: slotNum,
+        url: row.url ?? "",
+        name: row.name ?? "",
+        scrape_interval_minutes: row.scrape_interval_minutes,
+        alert_enabled: row.alert_enabled === 1,
+        threshold_mode: row.threshold_mode ?? "percent",
+        threshold_percent: row.threshold_percent ?? 5.0,
+        threshold_absolute: row.threshold_absolute ?? 0.0,
+        geocode: row.geocode,
+        zipcode: row.zipcode,
+      };
+    }
+    return {
+      id: slotNum,
+      url: "",
+      name: "",
+      scrape_interval_minutes: 60,
+      alert_enabled: true,
+      threshold_mode: "percent",
+      threshold_percent: 5.0,
+      threshold_absolute: 0.0,
+      geocode: "us",
+      zipcode: "10001",
+    };
+  });
+
+  return c.json({ slots });
+});
+
 /**
  * POST /api/settings
  * Body: { slots: Slot[] }
