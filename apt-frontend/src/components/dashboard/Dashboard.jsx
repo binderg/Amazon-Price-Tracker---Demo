@@ -19,7 +19,7 @@ import ProductDetailModal from './ProductDetailModal'
  *   onSettingsClick: () => void;
  * }} props
  */
-export default function Dashboard({ products, loading, error, onSettingsClick }) {
+export default function Dashboard({ products, loading, error, onSettingsClick, onTogglePause }) {
   const [selectedProduct, setSelectedProduct] = useState(null)
 
   return (
@@ -48,6 +48,7 @@ export default function Dashboard({ products, loading, error, onSettingsClick })
         loading={loading}
         onViewHistory={setSelectedProduct}
         onSettingsClick={onSettingsClick}
+        onTogglePause={onTogglePause}
       />
 
       {/* Detail modal */}

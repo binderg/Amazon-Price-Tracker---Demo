@@ -15,6 +15,7 @@ import {
   BarChart2,
   Clock,
   PauseCircle,
+  PlayCircle,
   CheckCircle,
 } from 'lucide-react'
 import { formatPrice } from '../../api/mockData'
@@ -70,7 +71,7 @@ function StatusBadge({ active }) {
  *   onViewHistory: (product: object) => void;
  * }} props
  */
-const ProductCard = memo(function ProductCard({ product, onViewHistory }) {
+const ProductCard = memo(function ProductCard({ product, onViewHistory, onTogglePause }) {
   const { name, shortName, asin, url, currentPrice, active, lastChecked, priceHistory, stats } =
     product
 
@@ -156,7 +157,7 @@ const ProductCard = memo(function ProductCard({ product, onViewHistory }) {
             {lastChecked ? formatDistanceToNow(lastChecked) : '—'}
           </span>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {url && (
               <a
                 href={url}
@@ -167,6 +168,22 @@ const ProductCard = memo(function ProductCard({ product, onViewHistory }) {
               >
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
+            )}
+            {onTogglePause && (
+              <button
+                onClick={() => onTogglePause(product)}
+                title={active ? 'Pause tracking' : 'Resume tracking'}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  active
+                    ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
+                    : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                }`}
+              >
+                {active
+                  ? <><PauseCircle className="w-3.5 h-3.5" /> Pause</>
+                  : <><PlayCircle className="w-3.5 h-3.5" /> Resume</>
+                }
+              </button>
             )}
             <button
               onClick={() => onViewHistory(product)}

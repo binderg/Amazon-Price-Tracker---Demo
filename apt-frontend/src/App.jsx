@@ -34,7 +34,7 @@ export default function App() {
     [],
   )
 
-  const { products, loading, error, lastUpdated, sseStatus, refresh } = usePriceData({
+  const { products, loading, error, lastUpdated, sseStatus, refresh, togglePause } = usePriceData({
     onPriceDrop: handlePriceDrop,
   })
 
@@ -65,6 +65,7 @@ export default function App() {
             loading={loading}
             error={error}
             onSettingsClick={() => setSettingsOpen(true)}
+            onTogglePause={togglePause}
           />
         </main>
 

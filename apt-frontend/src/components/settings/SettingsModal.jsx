@@ -1,41 +1,45 @@
 /**
  * SettingsModal.jsx
  *
- * Manages the user's 3 tracked product URL slots.
- * Parses each URL to show the detected ASIN inline.
- * Includes a fake "upgrade to premium" section — this is a demo placeholder.
+ * Manages the user's 3 tracked product URL slots plus per-product alert
+ * thresholds. Slots render as stacked rows so URL inputs never get clipped.
  */
 
 import { useState, useEffect } from 'react'
 import { Dialog } from 'primereact/dialog'
 import { InputText } from 'primereact/inputtext'
+import { InputNumber } from 'primereact/inputnumber'
 import { Button } from 'primereact/button'
 import {
   Link,
   CheckCircle,
   AlertCircle,
-  Crown,
-  ArrowRight,
+  Bell,
+  BellOff,
   Info,
   X,
+  Settings2,
+  Clock,
 } from 'lucide-react'
-import { parseAsin, INTERVAL_OPTIONS } from '../../api/mockData'
+import { parseAsin, INTERVAL_OPTIONS, DEFAULT_ALERT } from '../../api/mockData'
 
 // ─── Interval slider ──────────────────────────────────────────────────────────
 
 function IntervalSlider({ value, onChange }) {
   const currentIndex = INTERVAL_OPTIONS.findIndex((o) => o.minutes === value)
-  const index = currentIndex === -1 ? 2 : currentIndex // default to 1 hr
+  const index = currentIndex === -1 ? 2 : currentIndex
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-semibold text-slate-700">Check Interval</label>
+        <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5" />
+          Check Interval
+        </label>
         <span className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
           {INTERVAL_OPTIONS[index].label}
         </span>
       </div>
-
       <div className="relative px-1">
         <input
           type="range"
@@ -46,7 +50,6 @@ function IntervalSlider({ value, onChange }) {
           onChange={(e) => onChange(INTERVAL_OPTIONS[Number(e.target.value)].minutes)}
           className="w-full h-1.5 appearance-none rounded-full bg-slate-200 cursor-pointer accent-blue-600"
         />
-        {/* tick labels */}
         <div className="flex justify-between mt-1.5">
           {INTERVAL_OPTIONS.map((opt, i) => (
             <button
@@ -66,10 +69,130 @@ function IntervalSlider({ value, onChange }) {
   )
 }
 
-// ─── URL slot editor ──────────────────────────────────────────────────────────
+// ─── Alert threshold section ──────────────────────────────────────────────────
+
+const THRESHOLD_MODES = [
+  { value: 'percent',  label: '% Drop',  description: 'Trigger when price drops by a percentage' },
+  { value: 'absolute', label: '$ Drop',  description: 'Trigger when price drops by a fixed amount' },
+  { value: 'both',     label: 'Both',    description: 'Trigger only when BOTH conditions are met' },
+]
+
+function AlertThresholds({ slot, onChange }) {
+  const {
+    alert_enabled    = true,
+    threshold_mode   = 'percent',
+    threshold_percent  = 5.0,
+    threshold_absolute = 0.0,
+  } = slot
+
+  const showPercent  = threshold_mode === 'percent'  || threshold_mode === 'both'
+  const showAbsolute = threshold_mode === 'absolute' || threshold_mode === 'both'
+
+  return (
+    <div
+      className={`rounded-xl border p-4 transition-colors ${
+        alert_enabled
+          ? 'border-emerald-200 bg-emerald-50/40'
+          : 'border-slate-200 bg-slate-50/60 opacity-60'
+      }`}
+    >
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          {alert_enabled
+            ? <Bell className="w-4 h-4 text-emerald-600" />
+            : <BellOff className="w-4 h-4 text-slate-400" />
+          }
+          <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+            Price Drop Alert
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange({ ...slot, alert_enabled: !alert_enabled })}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${
+            alert_enabled ? 'bg-emerald-500' : 'bg-slate-300'
+          }`}
+          aria-label="Toggle alerts"
+        >
+          <span
+            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+              alert_enabled ? 'translate-x-4' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {alert_enabled && (
+        <div className="flex flex-col gap-3">
+          {/* Mode selector */}
+          <div className="flex gap-1.5">
+            {THRESHOLD_MODES.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                title={m.description}
+                onClick={() => onChange({ ...slot, threshold_mode: m.value })}
+                className={`flex-1 text-xs font-semibold py-1.5 px-2 rounded-lg border transition-colors cursor-pointer ${
+                  threshold_mode === m.value
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Threshold inputs */}
+          <div className={`grid gap-3 ${showPercent && showAbsolute ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {showPercent && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-500 font-medium">Min % drop</label>
+                <InputNumber
+                  value={threshold_percent}
+                  onValueChange={(e) => onChange({ ...slot, threshold_percent: e.value ?? 0 })}
+                  min={0.1} max={99}
+                  minFractionDigits={1} maxFractionDigits={1}
+                  suffix="%" className="w-full" inputClassName="text-sm"
+                />
+              </div>
+            )}
+            {showAbsolute && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-500 font-medium">Min $ drop</label>
+                <InputNumber
+                  value={threshold_absolute}
+                  onValueChange={(e) => onChange({ ...slot, threshold_absolute: e.value ?? 0 })}
+                  min={0.01} max={9999}
+                  minFractionDigits={2} maxFractionDigits={2}
+                  mode="currency" currency="USD" locale="en-US"
+                  className="w-full" inputClassName="text-sm"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Summary */}
+          <p className="text-xs text-slate-400">
+            {threshold_mode === 'percent'  && `Notify when price drops ≥ ${threshold_percent}%`}
+            {threshold_mode === 'absolute' && `Notify when price drops ≥ $${threshold_absolute?.toFixed(2)}`}
+            {threshold_mode === 'both'     && `Notify when price drops ≥ ${threshold_percent}% AND ≥ $${threshold_absolute?.toFixed(2)}`}
+          </p>
+        </div>
+      )}
+
+      {!alert_enabled && (
+        <p className="text-xs text-slate-400">Notifications are disabled for this product.</p>
+      )}
+    </div>
+  )
+}
+
+// ─── URL slot row card ────────────────────────────────────────────────────────
 
 function isValidAmazonUrl(url) {
-  if (!url) return true // empty is ok — slot is just unused
+  if (!url) return true
   try {
     const u = new URL(url)
     return (
@@ -81,114 +204,88 @@ function isValidAmazonUrl(url) {
   }
 }
 
-function UrlSlot({ slot, index, onChange }) {
-  const { url, name, scrape_interval_minutes } = slot
-  const asin = parseAsin(url)
+function SlotRow({ slot, index, onChange }) {
+  const { url = '', name = '', scrape_interval_minutes = 60 } = slot
+  const asin  = parseAsin(url)
   const valid = isValidAmazonUrl(url)
   const hasUrl = url.trim().length > 0
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-semibold text-slate-700">
-          Product {index + 1}
-        </label>
+    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+      {/* Slot header bar */}
+      <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200">
+        <div className="flex items-center gap-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-200 text-slate-600 text-xs font-bold">
+            {index + 1}
+          </span>
+          <span className="text-sm font-semibold text-slate-800">Product {index + 1}</span>
+        </div>
         {hasUrl && (
-          <span className="text-xs text-slate-400">
+          <span className="text-xs">
             {valid && asin ? (
-              <span className="flex items-center gap-1 text-emerald-600">
+              <span className="flex items-center gap-1 text-emerald-600 font-medium">
                 <CheckCircle className="w-3.5 h-3.5" />
                 ASIN: <span className="font-mono">{asin}</span>
               </span>
             ) : valid ? (
               <span className="flex items-center gap-1 text-amber-500">
-                <AlertCircle className="w-3.5 h-3.5" />
-                ASIN not detected
+                <AlertCircle className="w-3.5 h-3.5" /> ASIN not detected
               </span>
             ) : (
               <span className="flex items-center gap-1 text-red-500">
-                <AlertCircle className="w-3.5 h-3.5" />
-                Invalid Amazon URL
+                <AlertCircle className="w-3.5 h-3.5" /> Invalid Amazon URL
               </span>
             )}
           </span>
         )}
       </div>
 
-      {/* Custom display name */}
-      <InputText
-        value={name}
-        onChange={(e) => onChange({ ...slot, name: e.target.value })}
-        placeholder="Display name (optional)"
-        className="text-sm"
-      />
-
-      {/* URL input */}
-      <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-          <Link className="w-4 h-4" />
-        </span>
-        <InputText
-          value={url}
-          onChange={(e) => onChange({ ...slot, url: e.target.value })}
-          placeholder="https://www.amazon.com/dp/XXXXXXXXXX"
-          className={`pl-9 text-sm font-mono ${
-            hasUrl && !valid
-              ? 'border-red-400 ! focus:ring-red-200 !'
-              : ''
-          }`}
-        />
-        {hasUrl && (
-          <button
-            type="button"
-            onClick={() => onChange({ ...slot, url: '' })}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-
-      {/* Interval slider */}
-      <IntervalSlider
-        value={scrape_interval_minutes ?? 60}
-        onChange={(minutes) => onChange({ ...slot, scrape_interval_minutes: minutes })}
-      />
-    </div>
-  )
-}
-
-// ─── Premium upsell banner ────────────────────────────────────────────────────
-
-function PremiumBanner() {
-  return (
-    <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5">
-      <div className="flex items-start gap-3">
-        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-100 text-amber-600 flex-shrink-0">
-          <Crown className="w-5 h-5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <p className="text-sm font-semibold text-amber-900">Upgrade to Premium</p>
-            <span className="text-xs font-bold text-white bg-amber-500 px-2 py-0.5 rounded-full">
-              PRO
-            </span>
+      <div className="p-5 flex flex-col gap-4">
+        {/* Name + URL on same row — URL gets most of the space */}
+        <div className="grid gap-3" style={{ gridTemplateColumns: '200px 1fr' }}>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-500">Display name</label>
+            <InputText
+              value={name}
+              onChange={(e) => onChange({ ...slot, name: e.target.value })}
+              placeholder="e.g. Sony Headphones"
+              className="text-sm w-full"
+            />
           </div>
-          <p className="text-xs text-amber-700 leading-relaxed">
-            You're on the <strong>Free Plan</strong> — up to 3 products. Upgrade to
-            track unlimited products, set custom check intervals, and receive instant
-            email &amp; SMS alerts on price drops.
-          </p>
-          <button
-            type="button"
-            disabled
-            className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3 py-1.5 rounded-lg transition-colors cursor-not-allowed opacity-70"
-            title="Demo — not available"
-          >
-            View Plans
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-500">Amazon URL</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10">
+                <Link className="w-3.5 h-3.5" />
+              </span>
+              <InputText
+                value={url}
+                onChange={(e) => onChange({ ...slot, url: e.target.value })}
+                placeholder="https://www.amazon.com/dp/XXXXXXXXXX"
+                className={`pl-8 text-sm font-mono w-full ${hasUrl && !valid ? 'border-red-400 !' : ''}`}
+              />
+              {hasUrl && (
+                <button
+                  type="button"
+                  onClick={() => onChange({ ...slot, url: '' })}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer z-10"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* Interval slider — full width */}
+        <IntervalSlider
+          value={scrape_interval_minutes}
+          onChange={(minutes) => onChange({ ...slot, scrape_interval_minutes: minutes })}
+        />
+
+        {/* Alert thresholds — full width */}
+        <AlertThresholds slot={slot} onChange={onChange} />
       </div>
     </div>
   )
@@ -196,22 +293,14 @@ function PremiumBanner() {
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
-/**
- * @param {{
- *   visible: boolean;
- *   onHide: () => void;
- *   settings: import('../../api/mockData').DEFAULT_SETTINGS;
- *   onSave: (settings: object) => void;
- * }} props
- */
 export default function SettingsModal({ visible, onHide, settings, onSave }) {
   const [localSlots, setLocalSlots] = useState(settings?.slots ?? [])
-  const [saved, setSaved] = useState(false)
+  const [saved, setSaved]           = useState(false)
 
-  // Sync local state when the modal is opened
   useEffect(() => {
     if (visible) {
-      setLocalSlots(settings?.slots ?? [])
+      const merged = (settings?.slots ?? []).map((s) => ({ ...DEFAULT_ALERT, ...s }))
+      setLocalSlots(merged)
       setSaved(false)
     }
   }, [visible, settings])
@@ -224,13 +313,9 @@ export default function SettingsModal({ visible, onHide, settings, onSave }) {
   function handleSave() {
     const allValid = localSlots.every((s) => isValidAmazonUrl(s.url))
     if (!allValid) return
-
     onSave({ ...settings, slots: localSlots })
     setSaved(true)
-    setTimeout(() => {
-      setSaved(false)
-      onHide()
-    }, 800)
+    setTimeout(() => { setSaved(false); onHide() }, 800)
   }
 
   function handleDiscard() {
@@ -247,13 +332,7 @@ export default function SettingsModal({ visible, onHide, settings, onSave }) {
         Changes take effect on the next price check.
       </div>
       <div className="flex gap-2">
-        <Button
-          label="Discard"
-          severity="secondary"
-          outlined
-          onClick={handleDiscard}
-          size="small"
-        />
+        <Button label="Discard" severity="secondary" outlined onClick={handleDiscard} size="small" />
         <Button
           label={saved ? 'Saved!' : 'Save Changes'}
           icon={saved ? 'pi pi-check' : undefined}
@@ -273,38 +352,33 @@ export default function SettingsModal({ visible, onHide, settings, onSave }) {
       header={
         <div className="flex items-center gap-2.5">
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-600">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
+            <Settings2 className="w-4 h-4" />
           </div>
           <div>
             <p className="text-base font-semibold text-slate-900">Settings</p>
-            <p className="text-xs text-slate-400 font-normal">Manage your tracked products</p>
+            <p className="text-xs text-slate-400 font-normal">
+              Configure tracked products and alert thresholds
+            </p>
           </div>
         </div>
       }
       footer={footer}
-      style={{ width: '520px', maxWidth: '95vw' }}
+      style={{ width: '780px', maxWidth: '96vw' }}
       modal
       draggable={false}
       resizable={false}
     >
-      <div className="flex flex-col gap-6">
-        {/* URL slots */}
-        <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4">
+        {/* Section label */}
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+          <Settings2 className="w-3.5 h-3.5" />
+          Tracked Products &amp; Alert Thresholds
+        </div>
+
+        {/* Stacked slot rows */}
+        <div className="flex flex-col gap-4">
           {localSlots.map((slot, i) => (
-            <UrlSlot
+            <SlotRow
               key={slot.id}
               slot={slot}
               index={i}
@@ -313,11 +387,15 @@ export default function SettingsModal({ visible, onHide, settings, onSave }) {
           ))}
         </div>
 
-        {/* Divider */}
-        <hr className="border-slate-200" />
-
-        {/* Premium upsell */}
-        <PremiumBanner />
+        {/* Tip */}
+        <div className="flex items-start gap-2 text-xs text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+          <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+          <span>
+            Paste any <strong className="text-slate-600">amazon.com/dp/…</strong> URL. The ASIN is
+            parsed automatically. Per-product thresholds override global defaults in{' '}
+            <code className="font-mono bg-slate-100 px-1 rounded">.env</code>.
+          </span>
+        </div>
       </div>
     </Dialog>
   )

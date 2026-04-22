@@ -11,6 +11,11 @@ interface Slot {
   scrape_interval_minutes?: number;
   geocode?: string;
   zipcode?: string;
+  // Per-product alert thresholds
+  alert_enabled?: boolean;
+  threshold_mode?: "percent" | "absolute" | "both";
+  threshold_percent?: number;
+  threshold_absolute?: number;
 }
 
 function parseAsin(url: string): string | null {
@@ -50,6 +55,10 @@ settings.post("/", async (c) => {
     const interval = slot.scrape_interval_minutes ?? 60;
     const geocode = (slot.geocode ?? "us").toLowerCase();
     const zipcode = slot.zipcode ?? "10001";
+    const alertEnabled = slot.alert_enabled !== false ? 1 : 0;
+    const thresholdMode = slot.threshold_mode ?? "percent";
+    const thresholdPercent = slot.threshold_percent ?? Number(process.env.DROP_THRESHOLD_PERCENT ?? 5);
+    const thresholdAbsolute = slot.threshold_absolute ?? Number(process.env.DROP_THRESHOLD_ABSOLUTE ?? 0);
 
     // Empty URL → deactivate whatever was in this slot
     if (!url) {
@@ -107,11 +116,14 @@ settings.post("/", async (c) => {
         // Deactivate any previous tracked product in this slot
         db.run(`UPDATE tracked_products SET is_active = 0 WHERE slot = ?`, [slotNum]);
 
-        // Insert new tracked_product
+        // Insert new tracked_product with alert thresholds
         db.run(
-          `INSERT INTO tracked_products (asin, slot, geocode, zipcode, scrape_interval_minutes, last_scraped_at, is_active)
-           VALUES (?, ?, ?, ?, ?, unixepoch(), 1)`,
-          [asin, slotNum, geocode, zipcode, interval]
+          `INSERT INTO tracked_products
+             (asin, slot, geocode, zipcode, scrape_interval_minutes, last_scraped_at, is_active,
+              alert_enabled, threshold_mode, threshold_percent, threshold_absolute)
+           VALUES (?, ?, ?, ?, ?, unixepoch(), 1, ?, ?, ?, ?)`,
+          [asin, slotNum, geocode, zipcode, interval,
+           alertEnabled, thresholdMode, thresholdPercent, thresholdAbsolute]
         );
 
         // Seed first price snapshot
@@ -152,11 +164,14 @@ settings.post("/", async (c) => {
 
         results.push({ slot: slotNum, status: "added", asin });
       } else {
-        // Already tracked — just update the settings (interval, slot, name)
+        // Already tracked — update settings including alert thresholds
         db.run(
-          `UPDATE tracked_products SET scrape_interval_minutes = ?, slot = ?, is_active = 1
+          `UPDATE tracked_products
+           SET scrape_interval_minutes = ?, slot = ?, is_active = 1,
+               alert_enabled = ?, threshold_mode = ?, threshold_percent = ?, threshold_absolute = ?
            WHERE asin = ? AND geocode = ? AND zipcode = ?`,
-          [interval, slotNum, asin, geocode, zipcode]
+          [interval, slotNum, alertEnabled, thresholdMode, thresholdPercent, thresholdAbsolute,
+           asin, geocode, zipcode]
         );
 
         // Deactivate any *other* product that was previously in this slot

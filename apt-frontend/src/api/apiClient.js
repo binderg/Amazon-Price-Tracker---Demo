@@ -98,6 +98,22 @@ export async function removeProduct(id) {
 }
 
 /**
+ * Pauses or resumes tracking for a product (toggles is_active).
+ * @param {number} id
+ * @param {boolean} active
+ */
+export async function setProductActive(id, active) {
+  if (DEMO_MODE) {
+    await mockDelay()
+    return { id, active }
+  }
+  return apiFetch(`/products/${id}/active`, {
+    method: 'PATCH',
+    body: JSON.stringify({ active }),
+  })
+}
+
+/**
  * Retrieves the price history for a single product.
  * @param {number} id
  * @param {{ from?: string; to?: string }} [range]  ISO 8601 date strings

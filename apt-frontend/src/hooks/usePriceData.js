@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getProducts } from '../api/apiClient'
+import { getProducts, setProductActive } from '../api/apiClient'
 import { computeStats } from '../api/mockData'
 import { useSSE } from './useSSE'
 
@@ -102,6 +102,24 @@ export function usePriceData({ onPriceDrop } = {}) {
 
   const { status: sseStatus } = useSSE({ onPriceDrop: handleSSEEvent })
 
+  // Optimistically toggle a product's active state; rolls back on API error
+  const togglePause = useCallback(async (product) => {
+    const next = !product.active
+    // Optimistic update
+    setProducts((prev) =>
+      prev.map((p) => (p.id === product.id ? { ...p, active: next } : p))
+    )
+    try {
+      await setProductActive(product.id, next)
+    } catch (err) {
+      // Roll back
+      setProducts((prev) =>
+        prev.map((p) => (p.id === product.id ? { ...p, active: product.active } : p))
+      )
+      console.error('[usePriceData] togglePause failed', err)
+    }
+  }, [])
+
   return {
     products,
     loading,
@@ -109,5 +127,6 @@ export function usePriceData({ onPriceDrop } = {}) {
     lastUpdated,
     sseStatus,
     refresh: load,
+    togglePause,
   }
 }

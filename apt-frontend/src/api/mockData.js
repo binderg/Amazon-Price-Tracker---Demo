@@ -193,10 +193,18 @@ export const INTERVAL_OPTIONS = [
   { minutes: 1440, label: '24 hr'  },
 ]
 
+/** Default per-slot alert threshold settings */
+export const DEFAULT_ALERT = {
+  alert_enabled: true,
+  threshold_mode: 'percent',   // 'percent' | 'absolute' | 'both'
+  threshold_percent: 5.0,
+  threshold_absolute: 0.0,
+}
+
 export const DEFAULT_SETTINGS = {
   slots: [
-    { id: 1, url: MOCK_PRODUCTS[0].url, name: MOCK_PRODUCTS[0].shortName, scrape_interval_minutes: 60 },
-    { id: 2, url: MOCK_PRODUCTS[1].url, name: MOCK_PRODUCTS[1].shortName, scrape_interval_minutes: 60 },
-    { id: 3, url: MOCK_PRODUCTS[2].url, name: MOCK_PRODUCTS[2].shortName, scrape_interval_minutes: 60 },
+    { id: 1, url: MOCK_PRODUCTS[0].url, name: MOCK_PRODUCTS[0].shortName, scrape_interval_minutes: 60, ...DEFAULT_ALERT },
+    { id: 2, url: MOCK_PRODUCTS[1].url, name: MOCK_PRODUCTS[1].shortName, scrape_interval_minutes: 60, ...DEFAULT_ALERT },
+    { id: 3, url: MOCK_PRODUCTS[2].url, name: MOCK_PRODUCTS[2].shortName, scrape_interval_minutes: 60, ...DEFAULT_ALERT },
   ],
 }

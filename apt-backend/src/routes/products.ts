@@ -18,6 +18,11 @@ interface TrackedRow {
   brand: string | null;
   currency: string | null;
   currency_symbol: string | null;
+  // Alert thresholds
+  alert_enabled: number;
+  threshold_mode: string;
+  threshold_percent: number;
+  threshold_absolute: number;
 }
 
 interface SnapshotRow {
@@ -47,6 +52,10 @@ products.get("/", (c) => {
         tp.scrape_interval_minutes,
         tp.last_scraped_at,
         tp.is_active,
+        tp.alert_enabled,
+        tp.threshold_mode,
+        tp.threshold_percent,
+        tp.threshold_absolute,
         p.name,
         p.url,
         p.thumbnail,
@@ -113,10 +122,44 @@ products.get("/", (c) => {
       geocode: row.geocode,
       zipcode: row.zipcode,
       priceHistory,
+      alertEnabled: row.alert_enabled === 1,
+      thresholdMode: row.threshold_mode ?? "percent",
+      thresholdPercent: row.threshold_percent ?? 5.0,
+      thresholdAbsolute: row.threshold_absolute ?? 0.0,
     };
   });
 
   return c.json(result);
+});
+
+/**
+ * PATCH /api/products/:id/active
+ * Body: { active: boolean }
+ * Toggles is_active on a tracked_product without deleting it or its history.
+ */
+products.patch("/:id/active", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: "Invalid id" }, 400);
+
+  let body: { active?: boolean };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  if (typeof body.active !== "boolean") {
+    return c.json({ error: "active (boolean) is required" }, 400);
+  }
+
+  const info = db.run(
+    `UPDATE tracked_products SET is_active = ? WHERE id = ?`,
+    [body.active ? 1 : 0, id]
+  );
+
+  if (info.changes === 0) return c.json({ error: "Product not found" }, 404);
+
+  return c.json({ id, active: body.active });
 });
 
 export default products;

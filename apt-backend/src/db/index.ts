@@ -105,4 +105,40 @@ db.run(`
   )
 `);
 
+// ─── Per-product alert thresholds ─────────────────────────────────────────────
+// These live as columns on tracked_products so each slot can have its own config.
+// Migrations run with try/catch so they are safe on an existing DB.
+const alertMigrations = [
+  `ALTER TABLE tracked_products ADD COLUMN alert_enabled    INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE tracked_products ADD COLUMN threshold_mode   TEXT    NOT NULL DEFAULT 'percent'`,
+  `ALTER TABLE tracked_products ADD COLUMN threshold_percent REAL   NOT NULL DEFAULT 5.0`,
+  `ALTER TABLE tracked_products ADD COLUMN threshold_absolute REAL  NOT NULL DEFAULT 0.0`,
+];
+for (const sql of alertMigrations) {
+  try { db.run(sql); } catch { /* column already exists */ }
+}
+
+// ─── Price drop events (notification history) ────────────────────────────────
+db.run(`
+  CREATE TABLE IF NOT EXISTS price_drop_events (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    asin             TEXT    NOT NULL REFERENCES products(asin),
+    geocode          TEXT    NOT NULL,
+    zipcode          TEXT    NOT NULL,
+    previous_price   REAL    NOT NULL,
+    current_price    REAL    NOT NULL,
+    drop_amount      REAL    NOT NULL,
+    drop_percent     REAL    NOT NULL,
+    threshold_mode   TEXT    NOT NULL,
+    webhooks_fired   INTEGER NOT NULL DEFAULT 0,
+    webhooks_failed  INTEGER NOT NULL DEFAULT 0,
+    detected_at      INTEGER NOT NULL DEFAULT (unixepoch())
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_drop_events_asin_detected
+    ON price_drop_events(asin, detected_at)
+`);
+
 console.log(`Database ready at ${DB_PATH}`);
