@@ -55,10 +55,10 @@ export default function Dashboard({
       {/* Summary stats (full width) */}
       <StatsBar products={products} loading={loading} />
 
-      {/* Two-column layout: product grid + alerts sidebar */}
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* Product cards — grows to fill available space */}
-        <div className="flex-1 min-w-0">
+      {/* Two-column layout: (product grid + comparison chart) + alerts sidebar */}
+      <div className="flex flex-col lg:flex-row gap-6 items-stretch">
+        {/* Left column — product cards + comparison chart stacked */}
+        <div className="flex-1 min-w-0 flex flex-col gap-6">
           <ProductGrid
             products={products}
             loading={loading}
@@ -66,18 +66,17 @@ export default function Dashboard({
             onSettingsClick={onSettingsClick}
             onTogglePause={onTogglePause}
           />
+
+          {!loading && products.length > 0 && (
+            <ComparisonChart products={products} />
+          )}
         </div>
 
-        {/* Alerts sidebar — fixed width on large screens, full width on mobile */}
-        <div className="w-full lg:w-72 flex-shrink-0">
+        {/* Right column — alerts sidebar stretches to match left column height */}
+        <div className="w-full lg:w-72 flex-shrink-0 flex flex-col">
           <AlertsColumn alerts={alerts} onDismiss={onDismissAlert} />
         </div>
       </div>
-
-      {/* Comparison chart */}
-      {!loading && products.length > 0 && (
-        <ComparisonChart products={products} />
-      )}
 
       {/* Detail modal */}
       <ProductDetailModal
