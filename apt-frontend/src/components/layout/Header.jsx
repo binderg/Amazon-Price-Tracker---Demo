@@ -61,7 +61,7 @@ export default function Header({
 
           {/* Brand */}
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-600 text-white">
+            <div className="flex items-center justify-center w-9 h-9 text-orange-300">
               <ShoppingCart className="w-5 h-5" />
             </div>
             <div>
