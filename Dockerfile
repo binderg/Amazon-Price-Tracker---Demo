@@ -2,6 +2,10 @@
 
 FROM oven/bun:1 AS frontend-builder
 WORKDIR /app/apt-frontend
+ARG VITE_API_BASE_URL=
+ARG VITE_API_KEY=
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_API_KEY=$VITE_API_KEY
 COPY apt-frontend/package.json apt-frontend/bun.lock* ./
 RUN bun install
 COPY apt-frontend/ ./

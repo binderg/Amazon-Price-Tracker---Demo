@@ -22,11 +22,18 @@ export const DEMO_MODE = false
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
+// Production should default to same-origin so the built frontend can be served
+// from the same Bun container as the API without any localhost/CORS coupling.
+// Local dev can still override this with VITE_API_BASE_URL=http://localhost:3000.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 const API_KEY  = import.meta.env.VITE_API_KEY ?? ''
 
+function apiUrl(path) {
+  return API_BASE ? `${API_BASE}${path}` : path
+}
+
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API_BASE}/api${path}`, {
+  const res = await fetch(apiUrl(`/api${path}`), {
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': API_KEY,
@@ -45,7 +52,7 @@ async function apiFetch(path, options = {}) {
  * SSE URL with API key as a query param because EventSource cannot set headers.
  */
 export function getSseUrl() {
-  return `${API_BASE}/sse?key=${encodeURIComponent(API_KEY)}`
+  return `${apiUrl('/sse')}?key=${encodeURIComponent(API_KEY)}`
 }
 
 export function getSseHeaders() {
@@ -180,5 +187,4 @@ export async function getAlerts() {
   }
   return apiFetch('/alerts')
 }
-
 

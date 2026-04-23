@@ -23,6 +23,7 @@ jobs:
           test -n "${{ vars.IMAGE_NAME }}" || (echo "Missing IMAGE_NAME" && exit 1)
           test -n "${{ secrets.ACR_USERNAME }}" || (echo "Missing ACR_USERNAME" && exit 1)
           test -n "${{ secrets.ACR_PASSWORD }}" || (echo "Missing ACR_PASSWORD" && exit 1)
+          test -n "${{ secrets.VITE_API_KEY }}" || (echo "Missing VITE_API_KEY" && exit 1)
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -40,6 +41,9 @@ jobs:
           context: .
           push: true
           tags: ${{ env.IMAGE }}
+          build-args: |
+            VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL }}
+            VITE_API_KEY=${{ secrets.VITE_API_KEY }}
 
   deploy:
     needs: build-and-push

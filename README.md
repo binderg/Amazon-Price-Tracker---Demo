@@ -180,17 +180,16 @@ High-level steps:
 6. Create the Azure Container App pointing at the ACR image.
 7. Set application settings / environment variables in Azure.
 
-The workflow files already included are:
+The workflow file already included is:
 
-`/.github/workflows/docker-acr.yml`
-
-`/.github/workflows/deploy-containerapp.yml`
+`/.github/workflows/build-and-deploy.yml`
 
 GitHub repository **secrets** required:
 
 - `ACR_USERNAME`
 - `ACR_PASSWORD`
 - `AZURE_CREDENTIALS`
+- `VITE_API_KEY`
 
 GitHub repository **variables** required:
 
@@ -198,6 +197,7 @@ GitHub repository **variables** required:
 - `IMAGE_NAME` — for example `pricewatch`
 - `AZURE_RESOURCE_GROUP` — for example `pricewatch-rg`
 - `AZURE_CONTAINER_APP_NAME` — for example `pricewatch-app`
+- `VITE_API_BASE_URL` — leave blank for same-origin deploys, or set to a full backend URL for split deployments
 
 `AZURE_CREDENTIALS` should contain a service-principal JSON payload created with:
 
@@ -210,6 +210,8 @@ az ad sp create-for-rbac \
 ```
 
 Store the full JSON output as the GitHub secret value.
+
+`VITE_API_KEY` should match the backend `API_KEY` so the built frontend can call the protected `/api/*` routes and `/sse` stream in production.
 
 You can get the ACR credentials from Azure with:
 
@@ -230,7 +232,7 @@ az provider register --namespace Microsoft.OperationalInsights
 az containerapp env create --name pricewatch-env --resource-group pricewatch-rg --location eastus
 ```
 
-After GitHub Actions pushes `<your-acr-login-server>/<your-image-name>:latest`, create the container app once:
+Create the container app once:
 
 ```bash
 az containerapp create \
@@ -262,6 +264,8 @@ After that initial setup, each push to `main` will:
 1. build the Docker image from GitHub
 2. push it to ACR
 3. update the Azure Container App to the new `latest` image automatically
+
+The build and deploy happen in a single GitHub Actions workflow, so deploy only runs after the image build succeeds. This avoids the race where Azure tries to deploy `latest` before the image exists in ACR.
 
 Important note for SQLite on Azure:
 
