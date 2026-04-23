@@ -1,9 +1,8 @@
 name: Deploy To Azure Container Apps
 
 on:
-  workflow_run:
-    workflows: [Build and Push Docker Image]
-    types: [completed]
+  push:
+    branches: [ main, master ]
   workflow_dispatch:
 
 env:
@@ -13,10 +12,22 @@ env:
 
 jobs:
   deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate required variables
+        run: |
+          test -n "${{ vars.AZURE_RESOURCE_GROUP }}" || (echo "Missing AZURE_RESOURCE_GROUP" && exit 1)
+          test -n "${{ vars.AZURE_CONTAINER_APP_NAME }}" || (echo "Missing AZURE_CONTAINER_APP_NAME" && exit 1)
+          test -n "${{ vars.ACR_LOGIN_SERVER }}" || (echo "Missing ACR_LOGIN_SERVER" && exit 1)
+          test -n "${{ vars.IMAGE_NAME }}" || (echo "Missing IMAGE_NAME" && exit 1)
+
+      - name: Print deployment target
+        run: |
+          echo "Resource group: ${{ vars.AZURE_RESOURCE_GROUP }}"
+          echo "Container app: ${{ vars.AZURE_CONTAINER_APP_NAME }}"
+          echo "Image: ${{ vars.ACR_LOGIN_SERVER }}/${{ vars.IMAGE_NAME }}:latest"
+
       - name: Azure login
         uses: azure/login@v2
         with:
