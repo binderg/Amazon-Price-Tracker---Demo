@@ -5,8 +5,8 @@
  * and a link to the Amazon listing. Opened by clicking "History" on a card.
  */
 
-import { useState } from 'react'
-import { Dialog } from 'primereact/dialog'
+import { useState } from "react";
+import { Dialog } from "primereact/dialog";
 import {
   TrendingDown,
   TrendingUp,
@@ -14,24 +14,28 @@ import {
   ExternalLink,
   BarChart2,
   Tag,
-} from 'lucide-react'
-import { formatPrice } from '../../api/mockData'
-import PriceHistoryChart from './PriceHistoryChart'
+} from "lucide-react";
+import { formatPrice } from "../../api/mockData";
+import PriceHistoryChart from "./PriceHistoryChart";
 
 const RANGE_OPTIONS = [
-  { label: '7d', value: '7d' },
-  { label: '14d', value: '14d' },
-  { label: '30d', value: '30d' },
-  { label: '60d', value: '60d' },
-]
+  { label: "7d", value: "7d" },
+  { label: "14d", value: "14d" },
+  { label: "30d", value: "30d" },
+  { label: "60d", value: "60d" },
+];
 
 function StatRow({ label, value, highlight }) {
   return (
     <div className="flex justify-between items-center py-2.5 border-b border-slate-100 last:border-0">
       <span className="text-sm text-slate-500">{label}</span>
-      <span className={`text-sm font-semibold ${highlight ?? 'text-slate-800'}`}>{value}</span>
+      <span
+        className={`text-sm font-semibold ${highlight ?? "text-slate-800"}`}
+      >
+        {value}
+      </span>
     </div>
-  )
+  );
 }
 
 /**
@@ -42,25 +46,26 @@ function StatRow({ label, value, highlight }) {
  * }} props
  */
 export default function ProductDetailModal({ product, visible, onHide }) {
-  const [range, setRange] = useState('30d')
+  const [range, setRange] = useState("30d");
 
-  if (!product) return null
+  if (!product) return null;
 
-  const { name, asin, url, currentPrice, stats, priceHistory, category } = product
+  const { name, asin, url, currentPrice, stats, priceHistory, category } =
+    product;
 
   const changeColor =
     stats?.change24h == null || Math.abs(stats.change24h) < 0.01
-      ? 'text-slate-500'
+      ? "text-slate-500"
       : stats.change24h < 0
-        ? 'text-emerald-600'
-        : 'text-red-600'
+        ? "text-emerald-600"
+        : "text-red-600";
 
   const ChangIcon =
     stats?.change24h == null || Math.abs(stats.change24h) < 0.01
       ? Minus
       : stats.change24h < 0
         ? TrendingDown
-        : TrendingUp
+        : TrendingUp;
 
   const header = (
     <div className="flex items-center gap-3">
@@ -68,25 +73,25 @@ export default function ProductDetailModal({ product, visible, onHide }) {
         <BarChart2 className="w-5 h-5" />
       </div>
       <div className="min-w-0">
-        <p className="text-base font-semibold text-slate-900 truncate">{name}</p>
+        <p className="text-base font-semibold text-slate-900">
+          {name.length > 100 ? name.slice(0, 100) + "..." : name}
+        </p>{" "}
         <p className="text-xs text-slate-400 font-mono">
-          ASIN: {asin ?? '—'}
+          ASIN: {asin ?? "—"}
           {category && (
-            <span className="ml-2 font-sans not-monospace">
-              · {category}
-            </span>
+            <span className="ml-2 font-sans not-monospace">· {category}</span>
           )}
         </p>
       </div>
     </div>
-  )
+  );
 
   return (
     <Dialog
       visible={visible}
       onHide={onHide}
       header={header}
-      style={{ width: '720px', maxWidth: '95vw' }}
+      style={{ width: "720px", maxWidth: "95vw" }}
       modal
       draggable={false}
       resizable={false}
@@ -104,8 +109,8 @@ export default function ProductDetailModal({ product, visible, onHide }) {
                   onClick={() => setRange(opt.value)}
                   className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
                     range === opt.value
-                      ? 'bg-white text-slate-800 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700'
+                      ? "bg-white text-slate-800 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
                   {opt.label}
@@ -127,13 +132,16 @@ export default function ProductDetailModal({ product, visible, onHide }) {
               Statistics
             </p>
             <div className="bg-slate-50 rounded-xl p-4">
-              <StatRow label="Current Price" value={formatPrice(currentPrice)} />
+              <StatRow
+                label="Current Price"
+                value={formatPrice(currentPrice)}
+              />
               <StatRow
                 label="24h Change"
                 value={
                   stats?.change24h != null
-                    ? `${stats.change24h > 0 ? '+' : ''}${formatPrice(stats.change24h)}`
-                    : '—'
+                    ? `${stats.change24h > 0 ? "+" : ""}${formatPrice(stats.change24h)}`
+                    : "—"
                 }
                 highlight={changeColor}
               />
@@ -160,7 +168,7 @@ export default function ProductDetailModal({ product, visible, onHide }) {
               <div>
                 <p className="text-xs text-slate-400 mb-1">ASIN</p>
                 <p className="text-sm font-mono font-semibold text-slate-700">
-                  {asin ?? '—'}
+                  {asin ?? "—"}
                 </p>
               </div>
               {url && (
@@ -191,5 +199,5 @@ export default function ProductDetailModal({ product, visible, onHide }) {
         </div>
       </div>
     </Dialog>
-  )
+  );
 }
