@@ -13,9 +13,6 @@
  *   GET    /api/settings
  *   POST   /api/settings             { slots: Slot[] }
  *   GET    /api/alerts
- *   GET    /api/webhooks
- *   POST   /api/webhooks             { url }
- *   DELETE /api/webhooks/:id
  *   GET    /sse                      (EventSource, key via ?key=)
  */
 
@@ -184,29 +181,4 @@ export async function getAlerts() {
   return apiFetch('/alerts')
 }
 
-// ─── Webhooks ────────────────────────────────────────────────────────────────
 
-export async function getWebhooks() {
-  if (DEMO_MODE) {
-    await mockDelay()
-    return []
-  }
-  return apiFetch('/webhooks')
-}
-
-export async function addWebhook(url) {
-  if (DEMO_MODE) {
-    await mockDelay()
-    console.warn('[Demo] addWebhook — no-op', { url })
-    return { id: Date.now(), url }
-  }
-  return apiFetch('/webhooks', { method: 'POST', body: JSON.stringify({ url }) })
-}
-
-export async function removeWebhook(id) {
-  if (DEMO_MODE) {
-    await mockDelay()
-    return { success: true }
-  }
-  return apiFetch(`/webhooks/${id}`, { method: 'DELETE' })
-}

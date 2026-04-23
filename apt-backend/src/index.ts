@@ -7,6 +7,7 @@ import products from "./routes/products";
 import settings from "./routes/settings";
 import alerts from "./routes/alerts";
 import sse from "./routes/sse";
+import { startScheduler } from "./services/scheduler";
 
 // Import DB so tables are created on startup
 import "./db/index";
@@ -49,6 +50,9 @@ app.onError((err, c) => {
   logger.error({ err: err.message, stack: err.stack, url: c.req.url }, "unhandled error");
   return c.json({ error: "Internal server error" }, 500);
 });
+
+// ─── Scheduler ────────────────────────────────────────────────────────────────
+startScheduler();
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT ?? 3000);

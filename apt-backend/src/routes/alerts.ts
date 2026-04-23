@@ -14,8 +14,6 @@ interface AlertRow {
   drop_amount: number;
   drop_percent: number;
   threshold_mode: string;
-  webhooks_fired: number;
-  webhooks_failed: number;
   detected_at: number;
   name: string | null;
   url: string | null;
@@ -40,8 +38,6 @@ alerts.get("/", (c) => {
         pde.drop_amount,
         pde.drop_percent,
         pde.threshold_mode,
-        pde.webhooks_fired,
-        pde.webhooks_failed,
         pde.detected_at,
         p.name,
         p.url
@@ -63,7 +59,6 @@ alerts.get("/", (c) => {
     dropAmount: r.drop_amount,
     dropPercent: r.drop_percent,
     thresholdMode: r.threshold_mode,
-    webhooksFired: r.webhooks_fired,
     timestamp: new Date(r.detected_at * 1000).toISOString(),
   }));
 

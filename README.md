@@ -1,6 +1,6 @@
 # PriceWatch — Amazon Price Drop Monitor
 
-A full-stack application that monitors Amazon product prices, persists price history, and delivers webhook notifications on price drops.
+A full-stack application that monitors Amazon product prices, persists price history, and delivers real-time SSE notifications on price drops.
 
 ---
 

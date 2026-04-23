@@ -21,9 +21,6 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
   - No trigger if `alert_enabled = 0` for that product
 
 - [ ] **Notifier** (`apt-backend/src/services/notifier.ts`)
-  - ~~Loads all webhook URLs from `webhooks` table~~ — webhooks removed from scope
-  - ~~POSTs structured payload to each URL concurrently via `Promise.allSettled()`~~
-  - ~~Retry once after 5 s on failure; log final failure~~
   - Writes a row to `price_drop_events` (previous price, current price, drop %, timestamp)
 
 - [ ] **Structured logger** (`apt-backend/src/logger.ts`)
@@ -52,7 +49,7 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
 - [ ] **`tests/scraper.test.ts`** — mock Scrape.do response, assert price correctly extracted
 - [ ] **`tests/storage.test.ts`** — insert `price_snapshot` row, read it back, assert values match
 - [ ] **`tests/detector.test.ts`** — percent mode, absolute mode, both mode, no-prior-price guard, `alert_enabled = false` guard
-- [ ] **`tests/notifier.test.ts`** — ~~mock outbound `fetch`, assert webhook called with correct payload shape~~ — webhooks removed from scope
+- [ ] **`tests/notifier.test.ts`** — assert `price_drop_events` row inserted with correct shape
 
 ---
 

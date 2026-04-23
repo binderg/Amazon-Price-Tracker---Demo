@@ -68,5 +68,5 @@ export const scrapeLog  = logger.child({ module: "scrape"   });
 export const settingsLog = logger.child({ module: "settings" });
 export const productsLog = logger.child({ module: "products" });
 export const alertsLog  = logger.child({ module: "alerts"   });
-export const webhooksLog = logger.child({ module: "webhooks" });
 export const sseLog     = logger.child({ module: "sse"      });
+export const schedLog   = logger.child({ module: "scheduler" });
