@@ -1,0 +1,7 @@
+{
+  "name": "amazon-price-tracker",
+  "scripts": {
+    "frontend": "cd apt-frontend && bun run dev",
+    "backend": "cd apt-backend && bun run dev"
+  }
+}
