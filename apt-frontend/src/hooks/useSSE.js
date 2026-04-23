@@ -13,6 +13,30 @@
  * 3. The server should emit named events:
  *      event: price_update   data: { product_id, current_price, checked_at }
  *      event: price_drop     data: { ...PriceDropPayload }
+ *
+ * ── ERR_INCOMPLETE_CHUNKED_ENCODING & auto-reconnect ────────────────────────
+ * PROBLEM:
+ *   Bun v1.1.26 added a 10-second idle timeout that kills SSE connections
+ *   that carry no data. The browser reports this as ERR_INCOMPLETE_CHUNKED_
+ *   ENCODING — a network-level message that cannot be suppressed in code.
+ *   The backend fix (server.timeout(req, 0) + idleTimeout: 0 + 8 s pings)
+ *   prevents the server from killing the socket. But if the connection drops
+ *   for any reason (server restart, network blip, dev bun --watch file save)
+ *   the original code permanently closed the EventSource:
+ *
+ *     es.onerror = () => { setStatus('error'); es.close() }  // ← dead forever
+ *
+ *   The dashboard would stay broken until the user manually refreshed.
+ *
+ * SOLUTION:
+ *   On every onerror, close the dead EventSource and schedule a new one after
+ *   an exponential backoff delay (2 s → 4 s → 8 s … capped at 30 s). This is
+ *   done by incrementing connKey, which re-runs the useEffect and opens a
+ *   fresh EventSource. The backoff counter resets to 0 on a successful open.
+ *
+ *   ERR_INCOMPLETE_CHUNKED_ENCODING will still briefly appear in the console
+ *   on every server restart — that's unavoidable at the browser network layer.
+ *   What no longer happens is the connection staying dead afterward.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -22,6 +46,10 @@ import { MOCK_PRODUCTS } from '../api/mockData'
 
 // How often the demo simulates a new price event (ms)
 const DEMO_TICK_MS = 30_000
+
+// Reconnect backoff: 2 s, 4 s, 8 s … capped at 30 s
+const RECONNECT_BASE_MS = 2_000
+const RECONNECT_MAX_MS  = 30_000
 
 /**
  * @typedef {{ type: 'price_update' | 'price_drop'; data: object; id: number }} SSEEvent
@@ -37,20 +65,22 @@ const DEMO_TICK_MS = 30_000
 export function useSSE({ onPriceDrop: onEvent } = {}) {
   const [status, setStatus] = useState(DEMO_MODE ? 'demo' : 'connecting')
   const [lastEvent, setLastEvent] = useState(null)
-  const esRef = useRef(null)
-  const tickRef = useRef(null)
-  const onPriceDropRef = useRef(onEvent)
+  const [connKey, setConnKey] = useState(0) // increment to trigger a reconnect
+
+  const tickRef       = useRef(null)
+  const reconnectRef  = useRef(null)
+  const attemptRef    = useRef(0)        // backoff attempt counter
+  const onEventRef    = useRef(onEvent)
 
   // Keep the callback ref fresh without triggering re-connections
   useEffect(() => {
-    onPriceDropRef.current = onEvent
+    onEventRef.current = onEvent
   }, [onEvent])
 
   const handleEvent = useCallback((type, data) => {
     const event = { type, data, id: Date.now() }
     setLastEvent(event)
-    // Route ALL events to the consumer — they decide how to handle each type
-    onPriceDropRef.current?.(event)
+    onEventRef.current?.(event)
   }, [])
 
   useEffect(() => {
@@ -59,7 +89,6 @@ export function useSSE({ onPriceDrop: onEvent } = {}) {
       let tick = 0
       tickRef.current = setInterval(() => {
         tick++
-        // Cycle through the active mock products
         const active = MOCK_PRODUCTS.filter((p) => p.active)
         if (active.length === 0) return
         const product = active[tick % active.length]
@@ -80,15 +109,25 @@ export function useSSE({ onPriceDrop: onEvent } = {}) {
     }
 
     // ── Production mode: real EventSource ────────────────────────────────────
-    // API key is appended as ?key= because EventSource cannot set custom headers.
     const es = new EventSource(getSseUrl())
-    esRef.current = es
     setStatus('connecting')
 
-    es.onopen = () => setStatus('connected')
+    es.onopen = () => {
+      attemptRef.current = 0 // successful connection — reset backoff
+      setStatus('connected')
+    }
+
     es.onerror = () => {
-      setStatus('error')
       es.close()
+      setStatus('connecting')
+
+      // Exponential backoff: 2 s → 4 s → 8 s … max 30 s
+      const delay = Math.min(RECONNECT_BASE_MS * 2 ** attemptRef.current, RECONNECT_MAX_MS)
+      attemptRef.current++
+
+      reconnectRef.current = setTimeout(() => {
+        setConnKey((k) => k + 1) // re-run this effect with a fresh EventSource
+      }, delay)
     }
 
     es.addEventListener('price_update', (e) => {
@@ -108,10 +147,11 @@ export function useSSE({ onPriceDrop: onEvent } = {}) {
     })
 
     return () => {
+      clearTimeout(reconnectRef.current)
       es.close()
       setStatus('disconnected')
     }
-  }, [handleEvent])
+  }, [handleEvent, connKey])
 
   return { status, lastEvent }
 }

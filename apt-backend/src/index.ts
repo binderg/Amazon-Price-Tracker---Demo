@@ -67,7 +67,33 @@ logger.info(
   `apt-backend listening on :${PORT}`
 );
 
+// ─── Bun idle-timeout fix (v1.1.26+) ──────────────────────────────────────────
+//
+// PROBLEM:
+//   Bun v1.1.26 introduced a default 10-second idle timeout powered by the
+//   underlying uWebSockets (uWS) library. Any HTTP connection that carries no
+//   data for 10 seconds is silently killed. For SSE this is fatal — the
+//   stream goes quiet between scheduler ticks, Bun kills the socket, the
+//   browser logs ERR_INCOMPLETE_CHUNKED_ENCODING, EventSource reconnects,
+//   gets killed again 9 seconds later, and the loop repeats indefinitely.
+//
+// SOLUTION (two layers):
+//   1. Per-request: pass the Bun Server instance through Hono's env so the
+//      SSE route can call server.timeout(req, 0) to disable the timeout for
+//      that specific long-lived connection only. This is the approach
+//      recommended by the Bun docs.
+//   2. Global fallback: idleTimeout: 0 disables the timeout server-wide so
+//      any streaming response is safe even if the per-request call is missed.
+//
+// The SSE route also sends a keepalive ping every 8 seconds as defence-in-
+// depth against proxy/firewall idle timeouts (nginx, Cloudflare, AWS ALB)
+// that operate independently of Bun's setting.
+// ──────────────────────────────────────────────────────────────────────────────
 export default {
   port: PORT,
-  fetch: app.fetch,
+  fetch(req: Request, server: ReturnType<typeof Bun.serve>) {
+    // Inject the Bun server instance so routes can call server.timeout(req, 0)
+    return app.fetch(req, { server });
+  },
+  idleTimeout: 0,
 };

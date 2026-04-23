@@ -6,32 +6,35 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ## 🔴 High Priority — Core Requirements
 
-### Backend services (not yet built)
-- [ ] **Scheduler** (`apt-backend/src/services/scheduler.ts`)
+### Backend services
+- [x] **Scheduler** (`apt-backend/src/services/scheduler.ts`)
   - `setInterval` loop that runs price checks on all `is_active` products
   - Per-product `scrape_interval_minutes` respected — each product tracks its own `last_scraped_at`
   - Global fallback interval from `CHECK_INTERVAL_MINUTES` in `.env`
   - Kicks off on server startup; imported in `index.ts`
 
-- [ ] **Price drop detector** (`apt-backend/src/services/detector.ts`)
+- [x] **Price drop detector** (built into `scheduler.ts`)
   - Compares current price vs most recent successful snapshot for the same `asin + geocode + zipcode`
   - Reads per-product `threshold_mode`, `threshold_percent`, `threshold_absolute` from `tracked_products`
   - Modes: `percent` | `absolute` | `both`
   - No trigger on first check (no prior price) or failed check (null price)
   - No trigger if `alert_enabled = 0` for that product
 
-- [ ] **Notifier** (`apt-backend/src/services/notifier.ts`)
+- [x] **Notifier** (built into `scheduler.ts`)
   - Writes a row to `price_drop_events` (previous price, current price, drop %, timestamp)
+  - Broadcasts `price_drop` SSE event to all connected clients
 
-- [ ] **Structured logger** (`apt-backend/src/logger.ts`)
+- [x] **Structured logger** (`apt-backend/src/logger.ts`)
   - JSON output: `{ timestamp, level, event, product_id, asin, geocode, price, error }`
   - Events: `scheduler_tick` · `price_check` · `price_drop`
   - Level controlled by `LOG_LEVEL` env var
   - Pretty output in dev via pino-pretty; raw JSON in production
 
-- [ ] **SSE broadcast**
+- [x] **SSE broadcast** (`services/sseManager.ts` + `routes/sse.ts`)
   - Scheduler emits `price_update` and `price_drop` named events to all live `/sse` clients
-  - `sse.ts` currently only sends `connected` + keep-alive ping; needs a shared event bus
+  - Uses Hono `streamSSE` helper (not raw `ReadableStream`) to avoid premature stream finalisation
+  - Fixes Bun v1.1.26+ 10-second idle timeout (`server.timeout(req, 0)` + `idleTimeout: 0`)
+  - 8-second keepalive pings to survive proxy/firewall idle timeouts
 
 - [ ] **`POST /api/check`** — manual trigger endpoint
   - Runs a full check cycle immediately (all active products)
@@ -44,6 +47,10 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
   - SSE `/sse` connects with `?key=` auth
   - `useSettings` fetches initial state from `GET /api/settings`
   - `useAlerts` fetches historical alerts from `GET /api/alerts`
+
+- [x] **SSE auto-reconnect with exponential backoff** (`useSSE.js`)
+  - Replaces permanent `es.close()` on error with backoff retry (2 s → 4 s → … → 30 s)
+  - Dashboard recovers automatically after server restarts or network drops
 
 ### Testing
 - [ ] **`tests/scraper.test.ts`** — mock Scrape.do response, assert price correctly extracted
@@ -105,6 +112,8 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
 ## ✅ Completed
 
 - [x] Backend server setup (Hono + Bun + CORS + API key auth)
+- [x] Price scraping scheduler (`services/scheduler.ts`) — 60 s poll, per-product intervals
+- [x] SSE event bus (`services/sseManager.ts`) — `addClient` / `removeClient` / `broadcast`
 - [x] SQLite schema — `products`, `tracked_products`, `price_snapshots`, `price_drop_events`, `product_images`, `best_seller_rankings`
 - [x] Per-product alert threshold columns on `tracked_products` (`alert_enabled`, `threshold_mode`, `threshold_percent`, `threshold_absolute`)
 - [x] Scrape.do Amazon PDP API integration (`services/amazon.ts`)
@@ -113,7 +122,9 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
 - [x] `POST /api/settings` — upserts product slots + alert thresholds, seeds first snapshot
 - [x] `GET /api/alerts` — returns recent price_drop_events
 - [x] `PATCH /api/products/:id/active` — pause / resume tracking per product
-- [x] SSE stub (`/sse`) — connected event + keep-alive ping; `?key=` auth for EventSource
+- [x] SSE live stream (`/sse`) — `price_update` + `price_drop` events via Hono `streamSSE`
+  - Bun v1.1.26 idle timeout fix (`server.timeout(req, 0)` + `idleTimeout: 0` + 8 s pings)
+  - Auto-reconnect with exponential backoff in `useSSE.js`
 - [x] React + Vite frontend with PrimeReact + Tailwind
 - [x] Dashboard with `ProductGrid`, `ProductCard`, `PriceHistoryChart`, `StatsBar`, `ComparisonChart`
 - [x] Alerts sidebar (`AlertsColumn`, `AlertItem`) — live + persisted drop events

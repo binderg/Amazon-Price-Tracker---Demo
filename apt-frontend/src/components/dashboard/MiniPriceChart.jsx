@@ -5,7 +5,7 @@
  * Shows the last N days of price history with no axes or labels.
  */
 
-import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts'
+import { AreaChart, Area, Tooltip } from 'recharts'
 import { formatPrice } from '../../api/mockData'
 import { shortDate } from '../utils/time'
 
@@ -45,28 +45,26 @@ export default function MiniPriceChart({ history = [], trend = 'flat' }) {
     trend === 'down' ? '#dcfce7' : trend === 'up' ? '#fee2e2' : '#dbeafe'
 
   return (
-    <div className="h-10 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={slice} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-          <defs>
-            <linearGradient id={`miniGrad-${trend}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={fillColor} stopOpacity={0.8} />
-              <stop offset="95%" stopColor={fillColor} stopOpacity={0.1} />
-            </linearGradient>
-          </defs>
-          <Tooltip content={<MiniTooltip />} />
-          <Area
-            type="monotone"
-            dataKey="price"
-            stroke={strokeColor}
-            strokeWidth={1.5}
-            fill={`url(#miniGrad-${trend})`}
-            dot={false}
-            activeDot={{ r: 3, fill: strokeColor }}
-            isAnimationActive={false}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+    <div className="h-10 w-full min-w-0 overflow-hidden">
+      <AreaChart width={260} height={40} data={slice} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+        <defs>
+          <linearGradient id={`miniGrad-${trend}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={fillColor} stopOpacity={0.8} />
+            <stop offset="95%" stopColor={fillColor} stopOpacity={0.1} />
+          </linearGradient>
+        </defs>
+        <Tooltip content={<MiniTooltip />} />
+        <Area
+          type="monotone"
+          dataKey="price"
+          stroke={strokeColor}
+          strokeWidth={1.5}
+          fill={`url(#miniGrad-${trend})`}
+          dot={false}
+          activeDot={{ r: 3, fill: strokeColor }}
+          isAnimationActive={false}
+        />
+      </AreaChart>
     </div>
   )
 }
