@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { serveStatic } from "hono/bun";
 import { apiKeyAuth } from "./middleware/auth";
 import { requestLogger } from "./middleware/logger";
 import { logger } from "./logger";
@@ -41,6 +42,13 @@ app.route("/api/products", products);
 app.route("/api/settings", settings);
 app.route("/api/alerts", alerts);
 app.route("/sse", sse);
+
+// ─── Static frontend (production container only) ─────────────────────────────
+// When the frontend is built into apt-frontend/dist, serve it from the same Bun
+// process so Azure can run a single container for both UI and API.
+app.use("/assets/*", serveStatic({ root: "../apt-frontend/dist" }));
+app.get("/favicon.ico", serveStatic({ path: "../apt-frontend/dist/favicon.ico" }));
+app.get("/*", serveStatic({ path: "../apt-frontend/dist/index.html" }));
 
 // ─── 404 fallback ─────────────────────────────────────────────────────────────
 app.notFound((c) => c.json({ error: "Not found" }, 404));

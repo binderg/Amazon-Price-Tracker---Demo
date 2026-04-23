@@ -127,6 +127,129 @@ No code changes are required to manage the tracked product list.
    - a live alert appears in the dashboard
    - a toast notification appears in the browser UI
 
+## Docker And Azure Deployment
+
+This repo now includes a single-container deployment path.
+
+### Single container
+
+The container build:
+
+- builds the React frontend with Vite
+- copies the built `apt-frontend/dist` assets into the image
+- runs the Bun backend
+- serves both the API and the built frontend from the same Bun process
+
+Build locally:
+
+```bash
+docker build -t pricewatch .
+```
+
+Run locally:
+
+```bash
+docker run -p 3000:3000 \
+  -e API_KEY=your-shared-key \
+  -e SCRAPE_DO_TOKEN=your-scrape-do-token \
+  -e FRONTEND_ORIGIN=http://localhost:3000 \
+  -e PORT=3000 \
+  pricewatch
+```
+
+Open `http://localhost:3000`.
+
+### Azure Container Apps From GitHub
+
+Recommended deployment path: one container on Azure Container Apps, with GitHub Actions building the image from the repository and pushing it to Azure Container Registry.
+
+Why this path:
+
+- avoids Azure App Service quota problems
+- keeps frontend and backend in one deployable unit
+- avoids manual local Docker pushes after every code change
+- works well with this Bun + custom Dockerfile setup
+
+High-level steps:
+
+1. Push this repository to GitHub.
+2. Create an Azure Container Registry (ACR).
+3. Create an Azure Container Apps environment.
+4. Add ACR credentials to GitHub repository secrets.
+5. Let GitHub Actions build and push the image on every push to `main`.
+6. Create the Azure Container App pointing at the ACR image.
+7. Set application settings / environment variables in Azure.
+
+The workflow file is already included:
+
+`/.github/workflows/docker-acr.yml`
+
+GitHub secrets required:
+
+- `ACR_USERNAME`
+- `ACR_PASSWORD`
+
+You can get those from Azure with:
+
+```bash
+az acr update --name pricewatchregistry123 --admin-enabled true
+az acr credential show --name pricewatchregistry123
+```
+
+Typical Azure setup:
+
+```bash
+az login
+az group create --name pricewatch-rg --location eastus
+az acr create --resource-group pricewatch-rg --name pricewatchregistry123 --sku Basic
+az extension add --name containerapp --upgrade
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.OperationalInsights
+az containerapp env create --name pricewatch-env --resource-group pricewatch-rg --location eastus
+```
+
+After GitHub Actions pushes `pricewatchregistry123.azurecr.io/pricewatch:latest`, create the container app:
+
+```bash
+az containerapp create \
+  --name pricewatch-app \
+  --resource-group pricewatch-rg \
+  --environment pricewatch-env \
+  --image pricewatchregistry123.azurecr.io/pricewatch:latest \
+  --target-port 3000 \
+  --ingress external \
+  --registry-server pricewatchregistry123.azurecr.io \
+  --registry-username <acr-username> \
+  --registry-password <acr-password> \
+  --env-vars \
+    API_KEY=your-shared-key \
+    SCRAPE_DO_TOKEN=your-scrape-do-token \
+    PORT=3000 \
+    FRONTEND_ORIGIN=https://placeholder.local
+```
+
+Then get the generated URL and update `FRONTEND_ORIGIN`:
+
+```bash
+az containerapp show --name pricewatch-app --resource-group pricewatch-rg --query properties.configuration.ingress.fqdn
+az containerapp update --name pricewatch-app --resource-group pricewatch-rg --set-env-vars FRONTEND_ORIGIN=https://<your-container-app-fqdn>
+```
+
+Important note for SQLite on Azure:
+
+- the database file is stored inside the container filesystem by default
+- if the container is replaced, that local file is lost
+- for a real deployment, mount persistent storage or move the database to a managed service
+
+### Separate frontend/backend option
+
+If you do not want one container, the fallback Azure split is:
+
+- frontend: Azure Static Web Apps or Blob Storage static website hosting
+- backend: Azure Container Apps
+
+In that setup, set frontend `VITE_API_BASE_URL` to the backend URL and configure backend `FRONTEND_ORIGIN` to the frontend URL.
+
 ## Design And AI Notes
 
 - Tradeoffs and design decisions: [`DESIGN.md`](./DESIGN.md)
