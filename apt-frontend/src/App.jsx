@@ -46,6 +46,7 @@ export default function App() {
     sseStatus,
     refresh,
     togglePause,
+    triggerCheck,
     applySettingsFilter,
   } = usePriceData({ onPriceDrop: handlePriceDrop })
 
@@ -94,6 +95,7 @@ export default function App() {
             error={error}
             onSettingsClick={() => setSettingsOpen(true)}
             onTogglePause={togglePause}
+            onTriggerCheck={triggerCheck}
             alerts={alerts}
             onDismissAlert={dismissAlert}
           />

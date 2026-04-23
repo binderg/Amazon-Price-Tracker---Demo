@@ -1,0 +1,4 @@
+[test]
+# Run the setup file before every test suite so env vars are set before any
+# module is evaluated (e.g. logger.ts reads NODE_ENV at import time).
+preload = ["./tests/setup.ts"]
