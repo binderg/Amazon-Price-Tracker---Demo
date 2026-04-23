@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: pricewatchregistry123.azurecr.io
-  IMAGE_NAME: pricewatch
+  REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
+  IMAGE_NAME: ${{ vars.IMAGE_NAME }}
 
 jobs:
   build-and-push:

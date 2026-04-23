@@ -1,0 +1,32 @@
+name: Deploy To Azure Container Apps
+
+on:
+  workflow_run:
+    workflows: [Build and Push Docker Image]
+    types: [completed]
+  workflow_dispatch:
+
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME }}
+  IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/${{ vars.IMAGE_NAME }}:latest
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Update Azure Container App image
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az containerapp update \
+              --name "$CONTAINER_APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --image "$IMAGE"

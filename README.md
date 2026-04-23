@@ -180,20 +180,42 @@ High-level steps:
 6. Create the Azure Container App pointing at the ACR image.
 7. Set application settings / environment variables in Azure.
 
-The workflow file is already included:
+The workflow files already included are:
 
 `/.github/workflows/docker-acr.yml`
 
-GitHub secrets required:
+`/.github/workflows/deploy-containerapp.yml`
+
+GitHub repository **secrets** required:
 
 - `ACR_USERNAME`
 - `ACR_PASSWORD`
+- `AZURE_CREDENTIALS`
 
-You can get those from Azure with:
+GitHub repository **variables** required:
+
+- `ACR_LOGIN_SERVER` — for example `pricewatchregistry123.azurecr.io`
+- `IMAGE_NAME` — for example `pricewatch`
+- `AZURE_RESOURCE_GROUP` — for example `pricewatch-rg`
+- `AZURE_CONTAINER_APP_NAME` — for example `pricewatch-app`
+
+`AZURE_CREDENTIALS` should contain a service-principal JSON payload created with:
 
 ```bash
-az acr update --name pricewatchregistry123 --admin-enabled true
-az acr credential show --name pricewatchregistry123
+az ad sp create-for-rbac \
+  --name github-pricewatch-deployer \
+  --role contributor \
+  --scopes /subscriptions/<subscription-id>/resourceGroups/pricewatch-rg \
+  --json-auth
+```
+
+Store the full JSON output as the GitHub secret value.
+
+You can get the ACR credentials from Azure with:
+
+```bash
+az acr update --name <your-acr-name> --admin-enabled true
+az acr credential show --name <your-acr-name>
 ```
 
 Typical Azure setup:
@@ -201,24 +223,24 @@ Typical Azure setup:
 ```bash
 az login
 az group create --name pricewatch-rg --location eastus
-az acr create --resource-group pricewatch-rg --name pricewatchregistry123 --sku Basic
+az acr create --resource-group pricewatch-rg --name <your-acr-name> --sku Basic
 az extension add --name containerapp --upgrade
 az provider register --namespace Microsoft.App
 az provider register --namespace Microsoft.OperationalInsights
 az containerapp env create --name pricewatch-env --resource-group pricewatch-rg --location eastus
 ```
 
-After GitHub Actions pushes `pricewatchregistry123.azurecr.io/pricewatch:latest`, create the container app:
+After GitHub Actions pushes `<your-acr-login-server>/<your-image-name>:latest`, create the container app once:
 
 ```bash
 az containerapp create \
-  --name pricewatch-app \
-  --resource-group pricewatch-rg \
+  --name <your-container-app-name> \
+  --resource-group <your-resource-group> \
   --environment pricewatch-env \
-  --image pricewatchregistry123.azurecr.io/pricewatch:latest \
+  --image <your-acr-login-server>/<your-image-name>:latest \
   --target-port 3000 \
   --ingress external \
-  --registry-server pricewatchregistry123.azurecr.io \
+  --registry-server <your-acr-login-server> \
   --registry-username <acr-username> \
   --registry-password <acr-password> \
   --env-vars \
@@ -231,9 +253,15 @@ az containerapp create \
 Then get the generated URL and update `FRONTEND_ORIGIN`:
 
 ```bash
-az containerapp show --name pricewatch-app --resource-group pricewatch-rg --query properties.configuration.ingress.fqdn
-az containerapp update --name pricewatch-app --resource-group pricewatch-rg --set-env-vars FRONTEND_ORIGIN=https://<your-container-app-fqdn>
+az containerapp show --name <your-container-app-name> --resource-group <your-resource-group> --query properties.configuration.ingress.fqdn
+az containerapp update --name <your-container-app-name> --resource-group <your-resource-group> --set-env-vars FRONTEND_ORIGIN=https://<your-container-app-fqdn>
 ```
+
+After that initial setup, each push to `main` will:
+
+1. build the Docker image from GitHub
+2. push it to ACR
+3. update the Azure Container App to the new `latest` image automatically
 
 Important note for SQLite on Azure:
 
