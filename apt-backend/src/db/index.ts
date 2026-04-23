@@ -98,14 +98,6 @@ db.run(`
     ON best_seller_rankings(asin, recorded_at)
 `);
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS webhooks (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    url        TEXT NOT NULL UNIQUE,
-    created_at INTEGER NOT NULL DEFAULT (unixepoch())
-  )
-`);
-
 // ─── Per-product alert thresholds ─────────────────────────────────────────────
 // These live as columns on tracked_products so each slot can have its own config.
 // Migrations run with try/catch so they are safe on an existing DB.
@@ -131,8 +123,6 @@ db.run(`
     drop_amount      REAL    NOT NULL,
     drop_percent     REAL    NOT NULL,
     threshold_mode   TEXT    NOT NULL,
-    webhooks_fired   INTEGER NOT NULL DEFAULT 0,
-    webhooks_failed  INTEGER NOT NULL DEFAULT 0,
     detected_at      INTEGER NOT NULL DEFAULT (unixepoch())
   )
 `);

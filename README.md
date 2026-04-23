@@ -15,7 +15,6 @@ A full-stack application that monitors Amazon product prices, persists price his
 | UI components | **PrimeReact + Tailwind** | Rich component set, composable utility classes |
 | Charts | **Recharts** | Composable, React-native, sufficient for price history |
 | Scraping | **Scrape.do Amazon PDP API** | Managed anti-bot / proxy layer; returns structured JSON — no raw HTML parsing |
-| Notifications | **Outbound webhooks** | Consumer registers a URL; system POSTs a structured payload on price drop |
 | Real-time UI | **Server-Sent Events (SSE)** | Push price updates to the browser without polling |
 | Logging | **Pino + pino-pretty** | Structured JSON in production; pretty coloured output in dev |
 | Config | **`.env` + SQLite** | Secrets and scalars in `.env`; product list and alert thresholds managed via DB |
@@ -32,13 +31,12 @@ bun run dev     (apt-frontend)  →  Vite/React on :5173, proxies /api + /sse �
 ```
 
 ### Backend responsibilities
-- REST API for products, price history, webhooks, alert events
+- REST API for products, price history, alert events
 - Scheduler — `setInterval` loop that price-checks active products on a configurable interval
 - Scraper — calls Scrape.do Amazon PDP API, stores structured snapshot data
 - Price drop detector — compares current vs previous price, evaluates per-product threshold
-- Notifier — fires outbound webhooks concurrently, retries once on failure
 - SSE broadcaster — pushes `price_update` / `price_drop` events to connected browser clients
-- Structured JSON logger — every check and notification event captured with enough detail to debug from logs alone
+- Structured JSON logger — every check and price event captured with enough detail to debug from logs alone
 
 ### Frontend responsibilities
 - Dashboard showing all tracked products with current price and mini chart
@@ -64,13 +62,12 @@ bun run dev     (apt-frontend)  →  Vite/React on :5173, proxies /api + /sse �
 │   │   │   ├── products.ts       # GET /api/products, PATCH /api/products/:id/active
 │   │   │   ├── settings.ts       # GET /api/settings, POST /api/settings
 │   │   │   ├── alerts.ts         # GET /api/alerts (price_drop_events)
-│   │   │   ├── webhooks.ts       # GET/POST/DELETE /api/webhooks
+│   │   │   ├── alerts.ts         # GET /api/alerts (price_drop_events)
 │   │   │   └── sse.ts            # GET /sse (EventSource stream)
 │   │   ├── services/
 │   │   │   ├── amazon.ts         # Scrape.do Amazon PDP API client
 │   │   │   ├── scheduler.ts      # TODO: setInterval price check loop
-│   │   │   ├── detector.ts       # TODO: price drop comparison logic
-│   │   │   └── notifier.ts       # TODO: outbound webhook delivery
+│   │   │   └── detector.ts       # TODO: price drop comparison logic
 │   │   └── logger.ts             # Pino singleton + named child loggers per module
 │   ├── data/
 │   │   └── apt.db                # SQLite database (git-ignored)
@@ -175,18 +172,7 @@ Persistent log of every alert fired — survives process restarts.
 | `drop_amount` | REAL | `previous - current` |
 | `drop_percent` | REAL | |
 | `threshold_mode` | TEXT | Which rule triggered the alert |
-| `webhooks_fired` | INTEGER | Count of successful deliveries |
-| `webhooks_failed` | INTEGER | Count of failed deliveries |
 | `detected_at` | INTEGER | Unix timestamp |
-
-### `webhooks`
-Registered notification endpoints.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | INTEGER PK | |
-| `url` | TEXT UNIQUE | Consumer endpoint |
-| `created_at` | INTEGER | |
 
 ### `product_images`, `best_seller_rankings`
 Supplementary product data from Scrape.do, stored for future UI use.
@@ -243,13 +229,6 @@ GET  /api/alerts
 Returns the 50 most recent rows from `price_drop_events`, joined with product name and URL.
 Each entry is shaped to match the `AlertItem` component directly.
 
-### Webhooks
-```
-GET    /api/webhooks
-POST   /api/webhooks     { url }
-DELETE /api/webhooks/:id
-```
-
 ### Price check (dev trigger) — *TODO*
 ```
 POST /api/check          Runs a full check cycle immediately
@@ -267,22 +246,6 @@ Planned events (added with the scheduler service):
 event: price_update  data: { product_id, current_price, checked_at }
 event: price_drop    data: { product_id, product_name, asin, previous_price, current_price,
                               drop_amount, drop_percent, checked_at, product_url }
-```
-
-### Webhook payload (POST to registered URLs on price drop)
-```json
-{
-  "product_id": 1,
-  "product_name": "Sony WH-1000XM5",
-  "asin": "B09XS7JWHH",
-  "previous_price": 349.99,
-  "current_price": 279.99,
-  "drop_amount": 70.00,
-  "drop_percent": 20.0,
-  "threshold_mode": "percent",
-  "checked_at": "2026-04-22T14:00:00Z",
-  "product_url": "https://amazon.com/dp/B09XS7JWHH"
-}
 ```
 
 ---
@@ -337,7 +300,7 @@ THRESHOLD_MODE = "both":
 - Does not trigger on the first check (no prior price)
 - Does not trigger if the current check failed (null price)
 - Per-product `alert_enabled = 0` silences notifications for that slot
-- Every triggered alert is written to `price_drop_events` before webhooks are dispatched
+- Every triggered alert is written to `price_drop_events`
 
 ---
 
@@ -351,16 +314,6 @@ THRESHOLD_MODE = "both":
 
 **ToS note:** Scrape.do handles proxy rotation and cookie management. Direct scraping
 without a licensed intermediary conflicts with Amazon's Conditions of Use.
-
----
-
-## Webhook Delivery
-
-1. Load all registered webhook URLs from DB
-2. POST payload to each URL concurrently via `Promise.allSettled()`
-3. On failure: wait 5 s, retry once
-4. On second failure: log final failure, write to `price_drop_events.webhooks_failed`
-5. No persistent delivery queue — crashes mid-delivery may drop events (known, documented in DESIGN.md)
 
 ---
 
@@ -399,7 +352,6 @@ Each module imports its own named child logger from `src/logger.ts`, so every li
 | `settingsLog` | `settings` | `routes/settings.ts` |
 | `productsLog` | `products` | `routes/products.ts` |
 | `alertsLog` | `alerts` | `routes/alerts.ts` |
-| `webhooksLog` | `webhooks` | `routes/webhooks.ts` |
 | `sseLog` | `sse` | `routes/sse.ts` |
 | `dbLog` | `db` | `db/index.ts` |
 
@@ -448,7 +400,6 @@ log output via Pino's built-in `redact` option.
 |---|---|
 | Scrape.do fetch fails (network / timeout) | Null-price row in `price_snapshots`; scheduler continues |
 | Scrape.do returns `status: "error"` | Same as above; error message logged |
-| Webhook delivery fails | Retry once after 5 s; log final failure |
 | DB write fails | Log error; skip this check cycle |
 | DB read fails at startup | Crash with error (unrecoverable) |
 | All products fail in a cycle | `warn` log; scheduler continues |
@@ -456,7 +407,6 @@ log output via Pino's built-in `redact` option.
 **Explicitly not handled:**
 - Amazon IP ban / CAPTCHA — logged as a null price, no automatic recovery
 - DB corruption — crash and restart required
-- Webhook consumer returning non-2xx — treated as failure, retried once
 
 ---
 
@@ -469,7 +419,6 @@ One meaningful test per layer (`bun test`):
 | Scraper | `tests/scraper.test.ts` | Mock Scrape.do response → assert price extracted correctly |
 | Storage | `tests/storage.test.ts` | Insert `price_snapshot` row → read it back → assert values match |
 | Detector | `tests/detector.test.ts` | Percent mode, absolute mode, both mode, no-prior-price guard |
-| Notifier | `tests/notifier.test.ts` | Mock outbound fetch → assert webhook called with correct payload |
 
 > **Status:** test files not yet written — see TODO list.
 
@@ -510,9 +459,8 @@ Open **http://localhost:5173** in a browser.
 
 1. Add at least three product URLs in the Settings modal (⚙ button, top right)
 2. Confirm each shows a detected ASIN and the initial price appears in the dashboard
-3. Register a webhook URL (use [webhook.site](https://webhook.site) for a free test endpoint) via `POST /api/webhooks`
-4. Trigger an immediate check: `POST /api/check` (once the scheduler service is built)
-5. Lower the threshold (e.g. to 0.1%) in Settings, re-trigger — you should receive a webhook payload
+3. Trigger an immediate check: `POST /api/check` (once the scheduler service is built)
+4. Lower the threshold (e.g. to 0.1%) in Settings, re-trigger — you should see the price drop logged
 
 ---
 
@@ -524,7 +472,7 @@ See [DESIGN.md](./DESIGN.md) for the full discussion. Short version:
 |---|---|---|
 | Storage | SQLite | Zero-setup durability vs. no concurrent writes at 10x scale |
 | Scheduler | `setInterval` | Simplicity vs. no persistence across restarts |
-| Notification | Outbound webhooks | Flexible consumer model vs. no durable delivery queue |
+| Notification | In-app alerts + SSE | Real-time UI visibility vs. no external delivery channel |
 | Scraping | Scrape.do managed API | No selector fragility vs. paid dependency and per-request cost |
 | Product config | DB-managed slots | Runtime add/remove vs. DB is now a hard startup dependency |
 | Alert thresholds | Per-product in DB | Fine-grained control vs. slightly more complex query/save path |

@@ -5,7 +5,6 @@ import { requestLogger } from "./middleware/logger";
 import { logger } from "./logger";
 import products from "./routes/products";
 import settings from "./routes/settings";
-import webhooks from "./routes/webhooks";
 import alerts from "./routes/alerts";
 import sse from "./routes/sse";
 
@@ -40,7 +39,6 @@ app.use("/sse", apiKeyAuth);
 app.route("/api/products", products);
 app.route("/api/settings", settings);
 app.route("/api/alerts", alerts);
-app.route("/api/webhooks", webhooks);
 app.route("/sse", sse);
 
 // ─── 404 fallback ─────────────────────────────────────────────────────────────

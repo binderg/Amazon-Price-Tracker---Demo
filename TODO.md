@@ -21,15 +21,16 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
   - No trigger if `alert_enabled = 0` for that product
 
 - [ ] **Notifier** (`apt-backend/src/services/notifier.ts`)
-  - Loads all webhook URLs from `webhooks` table
-  - POSTs structured payload to each URL concurrently via `Promise.allSettled()`
-  - Retry once after 5 s on failure; log final failure
-  - Writes a row to `price_drop_events` (previous price, current price, drop %, webhook counts)
+  - ~~Loads all webhook URLs from `webhooks` table~~ — webhooks removed from scope
+  - ~~POSTs structured payload to each URL concurrently via `Promise.allSettled()`~~
+  - ~~Retry once after 5 s on failure; log final failure~~
+  - Writes a row to `price_drop_events` (previous price, current price, drop %, timestamp)
 
-- [ ] **Structured logger** (`apt-backend/src/services/logger.ts`)
+- [ ] **Structured logger** (`apt-backend/src/logger.ts`)
   - JSON output: `{ timestamp, level, event, product_id, asin, geocode, price, error }`
-  - Events: `scheduler_tick` · `price_check` · `price_drop` · `webhook_delivery` · `webhook_failure`
+  - Events: `scheduler_tick` · `price_check` · `price_drop`
   - Level controlled by `LOG_LEVEL` env var
+  - Pretty output in dev via pino-pretty; raw JSON in production
 
 - [ ] **SSE broadcast**
   - Scheduler emits `price_update` and `price_drop` named events to all live `/sse` clients
@@ -40,32 +41,33 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
   - Used for end-to-end verification without waiting for the interval
 
 ### Frontend
-- [ ] **Switch from demo mode to live API**
-  - Set `DEMO_MODE = false` in `apt-frontend/src/api/apiClient.js`
-  - Wire `saveSettings` in `useSettings.js` to call `saveSettingsToBackend()`
-  - Confirm SSE `/sse` connects and receives real events
+- [x] **Switch from demo mode to live API**
+  - `DEMO_MODE = false` in `apt-frontend/src/api/apiClient.js`
+  - `saveSettings` in `useSettings.js` calls `saveSettingsToBackend()` and refreshes products
+  - SSE `/sse` connects with `?key=` auth
+  - `useSettings` fetches initial state from `GET /api/settings`
+  - `useAlerts` fetches historical alerts from `GET /api/alerts`
 
 ### Testing
 - [ ] **`tests/scraper.test.ts`** — mock Scrape.do response, assert price correctly extracted
 - [ ] **`tests/storage.test.ts`** — insert `price_snapshot` row, read it back, assert values match
 - [ ] **`tests/detector.test.ts`** — percent mode, absolute mode, both mode, no-prior-price guard, `alert_enabled = false` guard
-- [ ] **`tests/notifier.test.ts`** — mock outbound `fetch`, assert webhook called with correct payload shape
+- [ ] **`tests/notifier.test.ts`** — ~~mock outbound `fetch`, assert webhook called with correct payload shape~~ — webhooks removed from scope
 
 ---
 
 ## 🟡 Medium Priority — Deliverables & Polish
 
-### Alerts panel (new feature)
-- [ ] **`GET /api/alerts`** (`apt-backend/src/routes/alerts.ts`)
+### Alerts panel
+- [x] **`GET /api/alerts`** (`apt-backend/src/routes/alerts.ts`)
   - Returns recent rows from `price_drop_events`
-  - Supports `?asin=` and `?limit=` query params
-  - Response shape: `{ id, asin, product_name, previous_price, current_price, drop_amount, drop_percent, threshold_mode, detected_at }`
+  - Response shape matches `AlertItem.jsx` component
 
-- [ ] **Alerts panel in Dashboard** (`apt-frontend/src/components/dashboard/`)
-  - Collapsible section or tab below the product grid
-  - Shows a list of recent price drop events: product name, old price → new price, drop %, timestamp
-  - Badge on the header/tab showing unread count
-  - Clicking a row highlights the relevant product card
+- [x] **Alerts panel in Dashboard** (`apt-frontend/src/components/alerts/`)
+  - `AlertsColumn.jsx` + `AlertItem.jsx` — sidebar showing recent price drop events
+  - Product name, old price → new price, drop %, timestamp, "View on Amazon" link
+  - Dismiss button persists to localStorage
+  - Live SSE `price_drop` events prepend automatically via `useAlerts.addAlert()`
 
 ### API
 - [ ] **`GET /api/products/:id/history`**
@@ -75,10 +77,9 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ### Docs
 - [ ] **`DESIGN.md`** — 1-page tradeoffs doc
-  - Tradeoff 1: SQLite vs PostgreSQL (why SQLite now, when to migrate)
-  - Tradeoff 2: `setInterval` vs BullMQ/cron (simplicity vs restart durability)
-  - Tradeoff 3: Outbound webhooks vs email/SMS (flexibility vs delivery reliability)
-  - Bonus: Scrape.do vs raw scraping; per-product thresholds in DB vs flat `.env`
+   - Tradeoff 1: SQLite vs PostgreSQL (why SQLite now, when to migrate)
+   - Tradeoff 2: `setInterval` vs BullMQ/cron (simplicity vs restart durability)
+   - Bonus: Scrape.do vs raw scraping; per-product thresholds in DB vs flat `.env`
 
 - [ ] **`AI-NOTES.md`** — honest account of one thing the AI got wrong or oversimplified
   - Where did it mislead or skip a real consideration?
@@ -98,10 +99,6 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
   - Workflow: install → `bun test` on push/PR
   - Optional: build check for frontend
 
-- [ ] **Live-updating Alerts panel**
-  - Drive the alerts list from SSE `price_drop` events without a page reload
-  - Decide between polling `/api/alerts` vs pure SSE push
-
 - [ ] **Multi-source comparison**
   - Add a second price source (e.g. CamelCamelCamel RSS or another retailer)
   - Show side-by-side price comparison per ASIN in the product detail modal
@@ -111,22 +108,26 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
 ## ✅ Completed
 
 - [x] Backend server setup (Hono + Bun + CORS + API key auth)
-- [x] SQLite schema — `products`, `tracked_products`, `price_snapshots`, `webhooks`, `product_images`, `best_seller_rankings`
-- [x] `price_drop_events` table added
+- [x] SQLite schema — `products`, `tracked_products`, `price_snapshots`, `price_drop_events`, `product_images`, `best_seller_rankings`
 - [x] Per-product alert threshold columns on `tracked_products` (`alert_enabled`, `threshold_mode`, `threshold_percent`, `threshold_absolute`)
 - [x] Scrape.do Amazon PDP API integration (`services/amazon.ts`)
 - [x] `GET /api/products` — returns products with 60-day price history and alert config
+- [x] `GET /api/settings` — returns current 3-slot configuration
 - [x] `POST /api/settings` — upserts product slots + alert thresholds, seeds first snapshot
-- [x] `GET/POST/DELETE /api/webhooks`
+- [x] `GET /api/alerts` — returns recent price_drop_events
 - [x] `PATCH /api/products/:id/active` — pause / resume tracking per product
-- [x] SSE stub (`/sse`) — connected event + keep-alive ping
+- [x] SSE stub (`/sse`) — connected event + keep-alive ping; `?key=` auth for EventSource
 - [x] React + Vite frontend with PrimeReact + Tailwind
-- [x] Dashboard with `ProductGrid`, `ProductCard`, `PriceHistoryChart`, `StatsBar`
+- [x] Dashboard with `ProductGrid`, `ProductCard`, `PriceHistoryChart`, `StatsBar`, `ComparisonChart`
+- [x] Alerts sidebar (`AlertsColumn`, `AlertItem`) — live + persisted drop events
 - [x] `usePriceData` + `useSSE` hooks (with demo-mode simulation)
+- [x] `useSettings` — syncs slot config with backend DB + localStorage
+- [x] `useAlerts` — loads price_drop_events from API; SSE prepends live alerts
 - [x] `SettingsModal` — stacked rows, wide URL input, per-product alert threshold UI
 - [x] Pause / Resume button on `ProductCard` (optimistic toggle via `usePriceData.togglePause`)
 - [x] Settings clear/delete wired correctly — cleared URL slots immediately remove product card via `applySettingsFilter`
-- [x] `ComparisonChart` below product grid — multi-product line chart with PrimeReact MultiSelect + range toggle
 - [x] Mini sparklines on product cards shrunk to `h-10`
 - [x] `.env.example` with all config fields documented
+- [x] Structured logging with Pino + pino-pretty (dev pretty / prod JSON, per-module child loggers, redaction)
+- [x] HTTP request/response logging middleware
 - [x] README rewritten to match actual codebase
