@@ -1,5 +1,7 @@
 # PriceWatch — Amazon Price Drop Monitor
 
+**Live demo:** https://pricewatch-app.wittyforest-5eabaeb9.eastus.azurecontainerapps.io/
+
 PriceWatch is a small full-stack application that tracks a configurable set of Amazon product URLs, stores price history durably, detects price drops, and shows live in-app notifications through a web dashboard.
 
 ## Legal And Ethical Note
