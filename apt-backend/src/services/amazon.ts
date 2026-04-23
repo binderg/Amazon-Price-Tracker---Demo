@@ -1,6 +1,5 @@
 import { scrapeLog } from "../logger";
 
-const SCRAPE_DO_TOKEN = process.env.SCRAPE_DO_TOKEN;
 const BASE_URL = "https://api.scrape.do/plugin/amazon/pdp";
 
 export interface AmazonProduct {
@@ -37,12 +36,14 @@ export async function getProductDetails(
   zipcode: string = "10001",
   includeHtml: boolean = false
 ): Promise<AmazonProduct> {
-  if (!SCRAPE_DO_TOKEN) {
+  // Read token lazily so tests can set process.env.SCRAPE_DO_TOKEN before calling.
+  const token = process.env.SCRAPE_DO_TOKEN;
+  if (!token) {
     throw new Error("SCRAPE_DO_TOKEN environment variable is not set");
   }
 
   const url = new URL(BASE_URL);
-  url.searchParams.set("token", SCRAPE_DO_TOKEN);
+  url.searchParams.set("token", token);
   url.searchParams.set("asin", asin);
   url.searchParams.set("geocode", geocode.toUpperCase());
   url.searchParams.set("zipcode", zipcode);

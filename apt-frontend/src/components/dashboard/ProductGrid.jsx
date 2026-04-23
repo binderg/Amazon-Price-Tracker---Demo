@@ -64,7 +64,7 @@ function EmptySlot({ slotNumber, onSettingsClick }) {
  *   onSettingsClick: () => void;
  * }} props
  */
-export default function ProductGrid({ products = [], loading, onViewHistory, onSettingsClick, onTogglePause }) {
+export default function ProductGrid({ products = [], loading, onViewHistory, onSettingsClick, onTogglePause, onTriggerCheck }) {
   const SLOT_COUNT = 3
 
   if (loading) {
@@ -88,6 +88,7 @@ export default function ProductGrid({ products = [], loading, onViewHistory, onS
             product={product}
             onViewHistory={onViewHistory}
             onTogglePause={onTogglePause}
+            onTriggerCheck={onTriggerCheck}
           />
         ) : (
           <EmptySlot key={i} slotNumber={i + 1} onSettingsClick={onSettingsClick} />

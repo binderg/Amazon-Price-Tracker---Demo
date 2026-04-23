@@ -30,6 +30,7 @@ export default function Dashboard({
   error,
   onSettingsClick,
   onTogglePause,
+  onTriggerCheck,
   alerts = [],
   onDismissAlert,
 }) {
@@ -65,6 +66,7 @@ export default function Dashboard({
             onViewHistory={setSelectedProduct}
             onSettingsClick={onSettingsClick}
             onTogglePause={onTogglePause}
+            onTriggerCheck={onTriggerCheck}
           />
 
           {!loading && products.length > 0 && (

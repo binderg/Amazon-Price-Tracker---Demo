@@ -5,7 +5,7 @@
  * and key metadata. Clicking "View History" opens the detail modal.
  */
 
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import {
   TrendingDown,
   TrendingUp,
@@ -17,6 +17,7 @@ import {
   PauseCircle,
   PlayCircle,
   CheckCircle,
+  RefreshCw,
 } from 'lucide-react'
 import { formatPrice } from '../../api/mockData'
 import { formatDistanceToNow } from '../utils/time'
@@ -71,9 +72,22 @@ function StatusBadge({ active }) {
  *   onViewHistory: (product: object) => void;
  * }} props
  */
-const ProductCard = memo(function ProductCard({ product, onViewHistory, onTogglePause }) {
+const ProductCard = memo(function ProductCard({ product, onViewHistory, onTogglePause, onTriggerCheck }) {
+  const [checking, setChecking] = useState(false)
   const { name, shortName, asin, url, currentPrice, active, lastChecked, priceHistory, stats } =
     product
+
+  async function handleCheckNow() {
+    if (!onTriggerCheck || checking) return
+    setChecking(true)
+    try {
+      await onTriggerCheck(product)
+    } finally {
+      // Keep the spinner visible briefly so the click feels acknowledged —
+      // the real result will arrive via SSE and update the card automatically.
+      setTimeout(() => setChecking(false), 2000)
+    }
+  }
 
   const trend =
     stats?.change24h == null || Math.abs(stats.change24h) < 0.01
@@ -168,6 +182,17 @@ const ProductCard = memo(function ProductCard({ product, onViewHistory, onToggle
               >
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
+            )}
+            {onTriggerCheck && active && (
+              <button
+                onClick={handleCheckNow}
+                disabled={checking}
+                title="Trigger an immediate price check"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-violet-600 hover:text-violet-700 hover:bg-violet-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
+                {checking ? 'Checking…' : 'Check Now'}
+              </button>
             )}
             {onTogglePause && (
               <button

@@ -108,6 +108,21 @@ export async function removeProduct(id) {
 }
 
 /**
+ * Triggers an immediate price check for a product outside the normal schedule.
+ * The updated price will arrive via the SSE stream; the caller does not need
+ * to poll — the dashboard updates automatically when the scrape completes.
+ * @param {number} id
+ */
+export async function triggerProductCheck(id) {
+  if (DEMO_MODE) {
+    await mockDelay()
+    console.warn('[Demo] triggerProductCheck — no-op in demo mode', { id })
+    return { ok: true }
+  }
+  return apiFetch(`/products/${id}/check`, { method: 'POST' })
+}
+
+/**
  * Pauses or resumes tracking for a product (toggles is_active).
  * @param {number} id
  * @param {boolean} active

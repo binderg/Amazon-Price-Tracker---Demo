@@ -103,6 +103,15 @@ bun run dev
 
 Open `http://localhost:5173`.
 
+## Tests
+
+```bash
+cd apt-backend
+bun test
+```
+
+38 tests across four layers: scraper, storage, drop-detection logic, and SSE notification manager. No external services are required — the scraper layer mocks `fetch`, and the storage tests use an in-memory SQLite database.
+
 ## Configure
 
 Use the Settings modal in the UI to:
@@ -116,16 +125,30 @@ No code changes are required to manage the tracked product list.
 
 ## End-To-End Verification
 
-1. Start backend and frontend.
+### Triggering a check immediately
+
+Each product card has a **Check Now** button that fires `POST /api/products/:id/check`. This triggers the full loop (scrape → snapshot → drop detection → SSE broadcast) on demand without waiting for the scheduler. Use this to verify the system end-to-end in seconds.
+
+You can also call it directly:
+
+```bash
+curl -X POST http://localhost:3000/api/products/1/check \
+  -H "X-API-Key: your-api-key"
+```
+
+### Full walkthrough
+
+1. Start the backend and frontend (`bun run dev` in each directory).
 2. Open the dashboard at `http://localhost:5173`.
-3. Add three Amazon product URLs in Settings and save.
-4. Confirm the dashboard shows the products and their historical price data.
-5. Leave the app running until the scheduler performs the next due scrape.
-6. Watch the backend logs for scrape activity and any detected price drops.
-7. If a price drop occurs and exceeds the configured threshold, verify:
-   - a `price_drop_events` row is written
-   - a live alert appears in the dashboard
-   - a toast notification appears in the browser UI
+3. Open Settings and configure three Amazon product URLs. Save.
+4. The dashboard shows each product, its current price, and the 60-day price history chart.
+5. Click **Check Now** on any product card to trigger an immediate scrape.
+6. Watch the backend logs — you will see `scrape started`, `snapshot saved`, and either `no drop detected` or `price drop detected — broadcasting`.
+7. To verify drop notification end-to-end, set the alert threshold very low (e.g. 0.01%) in Settings so the next price change triggers one. After clicking Check Now:
+   - a `price_drop_events` row appears in the SQLite database
+   - a live alert appears in the Alerts sidebar
+   - a toast notification fires in the top-right corner
+   - the product card price and chart update in real time via SSE
 
 ## Docker And Azure Deployment
 
@@ -281,6 +304,25 @@ If you do not want one container, the fallback Azure split is:
 - backend: Azure Container Apps
 
 In that setup, set frontend `VITE_API_BASE_URL` to the backend URL and configure backend `FRONTEND_ORIGIN` to the frontend URL.
+
+## Chosen Notification Method
+
+Price-drop notifications are delivered **in-app** via three complementary channels:
+
+1. **SSE push** — the backend broadcasts a `price_drop` event the moment a drop is detected; no polling required.
+2. **Browser toast** — a PrimeReact toast fires in the top-right corner with the product name, new price, and saving.
+3. **Alerts sidebar** — every alert is persisted in `price_drop_events` (SQLite) and surfaced in the dashboard panel, surviving page refreshes.
+
+This channel was chosen because it is immediately verifiable by a reviewer without any external credentials (no email provider, Slack workspace, or webhook endpoint needed). The tradeoff — notifications are not delivered if the browser tab is closed — is documented in `DESIGN.md`.
+
+## Known Limitations
+
+- **No out-of-band notifications.** Alerts are in-app only. If the dashboard is closed, the user does not receive the notification until they next open it. Adding email or webhook delivery would require an additional outbound integration.
+- **No duplicate-notification guard.** If two scheduler ticks overlapped (not possible in the current single-process design, but relevant at scale), duplicate `price_drop_events` rows could be written. A transactional idempotency key or advisory lock would fix this.
+- **SQLite is not multi-writer safe.** The WAL mode handles concurrent reads well, but multiple backend processes writing simultaneously would require PostgreSQL.
+- **Scrape.do dependency.** All scraping goes through a paid third-party API. If the service is unavailable or the token quota is exhausted, scrapes fail gracefully (logged, scheduler continues) but no price data is collected.
+- **No retry/backoff for failed scrapes.** A failed scrape is logged and skipped; it is retried at the next scheduled interval. There is no exponential backoff or dead-letter queue for persistent failures.
+- **3-slot product limit is a UI choice, not a system constraint.** The backend schema supports any number of tracked products. Expanding beyond three slots requires only a UI change.
 
 ## Design And AI Notes
 

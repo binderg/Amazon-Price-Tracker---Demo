@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getProducts, setProductActive } from '../api/apiClient'
+import { getProducts, setProductActive, triggerProductCheck } from '../api/apiClient'
 import { computeStats } from '../api/mockData'
 import { useSSE } from './useSSE'
 
@@ -112,6 +112,16 @@ export function usePriceData({ onPriceDrop } = {}) {
     setProducts((prev) => prev.filter((p) => activeSlotIds.has(p.slot)))
   }, [])
 
+  // Trigger an immediate scrape for one product.
+  // The scrape result arrives automatically via SSE — no manual refresh needed.
+  const triggerCheck = useCallback(async (product) => {
+    try {
+      await triggerProductCheck(product.id)
+    } catch (err) {
+      console.error('[usePriceData] triggerCheck failed', err)
+    }
+  }, [])
+
   // Optimistically toggle a product's active state; rolls back on API error
   const togglePause = useCallback(async (product) => {
     const next = !product.active
@@ -138,6 +148,7 @@ export function usePriceData({ onPriceDrop } = {}) {
     sseStatus,
     refresh: load,
     togglePause,
+    triggerCheck,
     applySettingsFilter,
   }
 }

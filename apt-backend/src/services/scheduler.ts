@@ -26,6 +26,7 @@
 import { db } from "../db/index";
 import { getProductDetails } from "./amazon";
 import { broadcast } from "./sseManager";
+import { checkPriceDrop } from "./detector";
 import { schedLog } from "../logger";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -150,59 +151,93 @@ async function scrapeProduct(product: DueProduct): Promise<void> {
   });
 
   // ── Price-drop detection ──────────────────────────────────────────────────
-  if (
-    newPrice !== null &&
-    prevPrice !== null &&
-    product.alert_enabled === 1 &&
-    newPrice < prevPrice
-  ) {
-    const dropAmount = Math.round((prevPrice - newPrice) * 100) / 100;
-    const dropPercent = Math.round((dropAmount / prevPrice) * 10000) / 100;
+  const dropResult = checkPriceDrop({
+    newPrice,
+    prevPrice,
+    alert_enabled: product.alert_enabled,
+    threshold_mode: product.threshold_mode,
+    threshold_percent: product.threshold_percent,
+    threshold_absolute: product.threshold_absolute,
+  });
 
+  if (dropResult?.triggered) {
+    const { dropAmount, dropPercent } = dropResult;
     const mode = product.threshold_mode;
-    let triggered = false;
 
-    if (mode === "percent" || mode === "both") {
-      if (dropPercent >= product.threshold_percent) triggered = true;
-    }
-    if (mode === "absolute" || mode === "both") {
-      if (dropAmount >= product.threshold_absolute) triggered = true;
-    }
+    // Persist the event
+    db.run(
+      `INSERT INTO price_drop_events
+         (asin, geocode, zipcode, previous_price, current_price,
+          drop_amount, drop_percent, threshold_mode)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        product.asin,
+        product.geocode,
+        product.zipcode,
+        prevPrice,
+        newPrice,
+        dropAmount,
+        dropPercent,
+        mode,
+      ]
+    );
 
-    if (triggered) {
-      // Persist the event
-      db.run(
-        `INSERT INTO price_drop_events
-           (asin, geocode, zipcode, previous_price, current_price,
-            drop_amount, drop_percent, threshold_mode)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          product.asin,
-          product.geocode,
-          product.zipcode,
-          prevPrice,
-          newPrice,
-          dropAmount,
-          dropPercent,
-          mode,
-        ]
-      );
+    log.info({ dropAmount, dropPercent, mode }, "price drop detected — broadcasting");
 
-      log.info({ dropAmount, dropPercent, mode }, "price drop detected — broadcasting");
-
-      // Push price_drop SSE event (shape matches useAlerts.js addAlert())
-      broadcast("price_drop", {
-        product_id: product.id,
-        product_name: product.name ?? product.asin,
-        product_url: product.url ?? `https://www.amazon.com/dp/${product.asin}`,
-        current_price: newPrice,
-        previous_price: prevPrice,
-        drop_amount: dropAmount,
-        drop_percent: dropPercent,
-        checked_at: checkedAt,
-      });
-    }
+    // Push price_drop SSE event (shape matches useAlerts.js addAlert())
+    broadcast("price_drop", {
+      product_id: product.id,
+      product_name: product.name ?? product.asin,
+      product_url: product.url ?? `https://www.amazon.com/dp/${product.asin}`,
+      current_price: newPrice,
+      previous_price: prevPrice,
+      drop_amount: dropAmount,
+      drop_percent: dropPercent,
+      checked_at: checkedAt,
+    });
   }
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Immediately scrape a single product by its tracked_products.id.
+ * Used by POST /api/products/:id/check so reviewers (and the panel) can
+ * trigger the full check → snapshot → detect → broadcast loop on demand
+ * without waiting for the next scheduled tick.
+ *
+ * Returns `{ found: false }` when the id doesn't exist or is inactive,
+ * `{ found: true }` after the scrape attempt (the scrape itself may still
+ * fail internally; failures are logged and do not throw to the caller).
+ */
+export async function checkProductById(
+  id: number
+): Promise<{ found: boolean }> {
+  const product = db
+    .query<DueProduct, [number]>(
+      `SELECT
+         tp.id,
+         tp.asin,
+         tp.geocode,
+         tp.zipcode,
+         tp.scrape_interval_minutes,
+         tp.alert_enabled,
+         tp.threshold_mode,
+         tp.threshold_percent,
+         tp.threshold_absolute,
+         p.name,
+         p.url
+       FROM tracked_products tp
+       LEFT JOIN products p ON p.asin = tp.asin
+       WHERE tp.id = ? AND tp.is_active = 1`
+    )
+    .get(id);
+
+  if (!product) return { found: false };
+
+  schedLog.info({ id, asin: product.asin }, "manual check triggered");
+  await scrapeProduct(product);
+  return { found: true };
 }
 
 // ─── Main loop ────────────────────────────────────────────────────────────────

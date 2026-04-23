@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { db } from "../db/index";
 import { productsLog } from "../logger";
+import { checkProductById } from "../services/scheduler";
 
 const products = new Hono();
 
@@ -170,6 +171,32 @@ products.patch("/:id/active", async (c) => {
 
   productsLog.info({ id, active: body.active }, "product active state toggled");
   return c.json({ id, active: body.active });
+});
+
+/**
+ * POST /api/products/:id/check
+ * Immediately triggers a price scrape for the given product outside the
+ * normal scheduler cadence. Useful for reviewers and during development to
+ * verify the full check → snapshot → drop-detection → SSE-broadcast loop
+ * without waiting for the next scheduled tick.
+ *
+ * Returns 404 if the product is not found or is currently paused.
+ */
+products.post("/:id/check", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) {
+    return c.json({ error: "Invalid id" }, 400);
+  }
+
+  productsLog.info({ id }, "manual check requested via POST /:id/check");
+
+  const result = await checkProductById(id);
+
+  if (!result.found) {
+    return c.json({ error: "Product not found or not active" }, 404);
+  }
+
+  return c.json({ ok: true, message: "Check triggered — results will arrive via SSE" });
 });
 
 export default products;
