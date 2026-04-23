@@ -292,11 +292,47 @@ After that initial setup, each push to `main` will:
 
 The build and deploy happen in a single GitHub Actions workflow, so deploy only runs after the image build succeeds. This avoids the race where Azure tries to deploy `latest` before the image exists in ACR.
 
-Important note for SQLite on Azure:
+### Persistent storage for SQLite on Azure
 
-- the database file is stored inside the container filesystem by default
-- if the container is replaced, that local file is lost
-- for a real deployment, mount persistent storage or move the database to a managed service
+The live deployment mounts an Azure Files share at `/app/apt-backend/data` so the SQLite database survives container replacements and redeployments. The setup was done once via Azure CLI and requires no code changes.
+
+To replicate this in a new environment:
+
+**1. Create a storage account and file share:**
+```bash
+az storage account create \
+  --name <storage-account-name> \
+  --resource-group <resource-group> \
+  --location eastus \
+  --sku Standard_LRS
+
+KEY=$(az storage account keys list \
+  --account-name <storage-account-name> \
+  --resource-group <resource-group> \
+  --query "[0].value" --output tsv) && \
+az storage share create \
+  --name sqlite-data \
+  --account-name <storage-account-name> \
+  --account-key "$KEY"
+```
+
+**2. Link the share to the Container Apps Environment:**
+```bash
+az containerapp env storage set \
+  --name <container-apps-environment-name> \
+  --resource-group <environment-resource-group> \
+  --storage-name sqlite-storage-mount \
+  --azure-file-account-name <storage-account-name> \
+  --azure-file-account-key "$KEY" \
+  --azure-file-share-name sqlite-data \
+  --access-mode ReadWrite
+```
+
+**3. Mount the volume on the Container App** (via the Azure Portal under Containers → Volume mounts, or via YAML/REST patch):
+- Volume: `sqlite-storage-mount`
+- Mount path: `/app/apt-backend/data`
+
+After this, the `apt.db` file is written to Azure Files and all data persists across deployments.
 
 ### Separate frontend/backend option
 

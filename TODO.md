@@ -111,6 +111,12 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ## ✅ Completed
 
+- [x] **Persistent SQLite storage on Azure**
+  - Azure Files share (`sqlite-data`) mounted at `/app/apt-backend/data` in the Container Apps environment
+  - Database survives container replacement and redeployments
+  - No code changes required — mount path matches existing `db/index.ts` hardcoded path
+  - Storage account: `pricewatchdb2026`, environment binding: `sqlite-storage-mount`
+
 - [x] Backend server setup (Hono + Bun + CORS + API key auth)
 - [x] Price scraping scheduler (`services/scheduler.ts`) — 60 s poll, per-product intervals
 - [x] SSE event bus (`services/sseManager.ts`) — `addClient` / `removeClient` / `broadcast`

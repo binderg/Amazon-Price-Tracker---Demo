@@ -187,6 +187,20 @@ Logged events include:
 - price-drop detection
 - unhandled errors
 
+## Storage And Persistence
+
+The SQLite database file lives at `apt-backend/data/apt.db` relative to the project root, which resolves to `/app/apt-backend/data/apt.db` inside the container.
+
+In the live Azure deployment, an Azure Files share is mounted at `/app/apt-backend/data` in the Container Apps environment. This means the database file is written to networked persistent storage rather than the container's ephemeral local filesystem. The database survives container replacement, scaling events, and redeployments triggered by GitHub pushes.
+
+No application code change was required — the mount path matches the existing hardcoded database path in `db/index.ts`.
+
+Azure resources involved:
+- Storage account: `pricewatchdb2026`
+- File share: `sqlite-data`
+- Container Apps Environment storage binding: `sqlite-storage-mount`
+- Volume mount path on the container: `/app/apt-backend/data`
+
 ## Failure Handling
 
 Handled explicitly:
