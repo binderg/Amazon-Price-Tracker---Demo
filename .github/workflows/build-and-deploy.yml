@@ -1,0 +1,73 @@
+name: Build And Deploy To Azure
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
+  IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME }}
+  IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/${{ vars.IMAGE_NAME }}:latest
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate build configuration
+        run: |
+          test -n "${{ vars.ACR_LOGIN_SERVER }}" || (echo "Missing ACR_LOGIN_SERVER" && exit 1)
+          test -n "${{ vars.IMAGE_NAME }}" || (echo "Missing IMAGE_NAME" && exit 1)
+          test -n "${{ secrets.ACR_USERNAME }}" || (echo "Missing ACR_USERNAME" && exit 1)
+          test -n "${{ secrets.ACR_PASSWORD }}" || (echo "Missing ACR_PASSWORD" && exit 1)
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate deploy configuration
+        run: |
+          test -n "${{ vars.AZURE_RESOURCE_GROUP }}" || (echo "Missing AZURE_RESOURCE_GROUP" && exit 1)
+          test -n "${{ vars.AZURE_CONTAINER_APP_NAME }}" || (echo "Missing AZURE_CONTAINER_APP_NAME" && exit 1)
+          test -n "${{ secrets.AZURE_CREDENTIALS }}" || (echo "Missing AZURE_CREDENTIALS" && exit 1)
+
+      - name: Print deployment target
+        run: |
+          echo "Resource group: ${{ vars.AZURE_RESOURCE_GROUP }}"
+          echo "Container app: ${{ vars.AZURE_CONTAINER_APP_NAME }}"
+          echo "Image: ${{ env.IMAGE }}"
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy image to Azure Container App
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az containerapp update \
+              --name "${{ env.CONTAINER_APP_NAME }}" \
+              --resource-group "${{ env.RESOURCE_GROUP }}" \
+              --image "${{ env.IMAGE }}"
