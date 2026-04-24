@@ -189,17 +189,15 @@ Logged events include:
 
 ## Storage And Persistence
 
-The SQLite database file lives at `apt-backend/data/apt.db` relative to the project root, which resolves to `/app/apt-backend/data/apt.db` inside the container.
+The database layer uses [Turso](https://turso.tech) — a hosted libSQL service that is wire-compatible with SQLite. The client is `@libsql/client`, which exposes an async `db.execute({ sql, args })` API. All SQL is standard SQLite syntax; the schema and queries are otherwise identical to what would run against a local `bun:sqlite` file.
 
-In the live Azure deployment, an Azure Files share is mounted at `/app/apt-backend/data` in the Container Apps environment. This means the database file is written to networked persistent storage rather than the container's ephemeral local filesystem. The database survives container replacement, scaling events, and redeployments triggered by GitHub pushes.
+The database schema is created on startup by `initDb()` in `db/index.ts` using `db.executeMultiple()` with `CREATE TABLE IF NOT EXISTS` statements, making it safe to call on every boot.
 
-No application code change was required — the mount path matches the existing hardcoded database path in `db/index.ts`.
+Connection is configured via two environment variables:
+- `TURSO_URL` — the libSQL endpoint (e.g. `libsql://your-db.turso.io`)
+- `TURSO_TOKEN` — the auth token for the database
 
-Azure resources involved:
-- Storage account: `pricewatchdb2026`
-- File share: `sqlite-data`
-- Container Apps Environment storage binding: `sqlite-storage-mount`
-- Volume mount path on the container: `/app/apt-backend/data`
+Both are stored as GitHub repository secrets and injected into the Azure Container App as environment variables on every deploy by the GitHub Actions workflow.
 
 ## Failure Handling
 

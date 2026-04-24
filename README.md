@@ -292,47 +292,26 @@ After that initial setup, each push to `main` will:
 
 The build and deploy happen in a single GitHub Actions workflow, so deploy only runs after the image build succeeds. This avoids the race where Azure tries to deploy `latest` before the image exists in ACR.
 
-### Persistent storage for SQLite on Azure
+### Database: Turso (hosted SQLite)
 
-The live deployment mounts an Azure Files share at `/app/apt-backend/data` so the SQLite database survives container replacements and redeployments. The setup was done once via Azure CLI and requires no code changes.
+The live deployment uses [Turso](https://turso.tech) — a hosted libSQL service that is wire-compatible with SQLite. The database schema and all queries are unchanged from local SQLite. Data persists across container replacements and redeployments with no infrastructure to manage.
 
-To replicate this in a new environment:
+Required environment variables (set as GitHub secrets and Azure Container App env vars):
 
-**1. Create a storage account and file share:**
-```bash
-az storage account create \
-  --name <storage-account-name> \
-  --resource-group <resource-group> \
-  --location eastus \
-  --sku Standard_LRS
-
-KEY=$(az storage account keys list \
-  --account-name <storage-account-name> \
-  --resource-group <resource-group> \
-  --query "[0].value" --output tsv) && \
-az storage share create \
-  --name sqlite-data \
-  --account-name <storage-account-name> \
-  --account-key "$KEY"
+```env
+TURSO_URL=libsql://your-database.turso.io
+TURSO_TOKEN=your-turso-auth-token
 ```
 
-**2. Link the share to the Container Apps Environment:**
-```bash
-az containerapp env storage set \
-  --name <container-apps-environment-name> \
-  --resource-group <environment-resource-group> \
-  --storage-name sqlite-storage-mount \
-  --azure-file-account-name <storage-account-name> \
-  --azure-file-account-key "$KEY" \
-  --azure-file-share-name sqlite-data \
-  --access-mode ReadWrite
-```
+To set up a new Turso database:
 
-**3. Mount the volume on the Container App** (via the Azure Portal under Containers → Volume mounts, or via YAML/REST patch):
-- Volume: `sqlite-storage-mount`
-- Mount path: `/app/apt-backend/data`
+1. Create a free account at https://turso.tech
+2. Run `turso db create pricewatch`
+3. Run `turso db tokens create pricewatch` to get the auth token
+4. Add `TURSO_URL` and `TURSO_TOKEN` as GitHub repository secrets
+5. The schema is created automatically on first startup via `initDb()` in `db/index.ts`
 
-After this, the `apt.db` file is written to Azure Files and all data persists across deployments.
+The GitHub Actions workflow passes both secrets as environment variables to the Container App on every deploy.
 
 ### Separate frontend/backend option
 
@@ -357,10 +336,22 @@ This channel was chosen because it is immediately verifiable by a reviewer witho
 
 - **No out-of-band notifications.** Alerts are in-app only. If the dashboard is closed, the user does not receive the notification until they next open it. Adding email or webhook delivery would require an additional outbound integration.
 - **No duplicate-notification guard.** If two scheduler ticks overlapped (not possible in the current single-process design, but relevant at scale), duplicate `price_drop_events` rows could be written. A transactional idempotency key or advisory lock would fix this.
-- **SQLite is not multi-writer safe.** The WAL mode handles concurrent reads well, but multiple backend processes writing simultaneously would require PostgreSQL.
+- **Turso (libSQL) is SQLite-compatible but async.** All database calls use `await db.execute()`. The schema and queries are otherwise identical to local SQLite.
 - **Scrape.do dependency.** All scraping goes through a paid third-party API. If the service is unavailable or the token quota is exhausted, scrapes fail gracefully (logged, scheduler continues) but no price data is collected.
 - **No retry/backoff for failed scrapes.** A failed scrape is logged and skipped; it is retried at the next scheduled interval. There is no exponential backoff or dead-letter queue for persistent failures.
-- **3-slot product limit is a UI choice, not a system constraint.** The backend schema supports any number of tracked products. Expanding beyond three slots requires only a UI change.
+- **3-slot product limit is driven by the Scrape.do free tier.** The backend schema supports any number of tracked products, but each price check consumes a Scrape.do API credit. The free tier quota makes tracking more than a few products impractical. Expanding the slot count is a UI change, but doing so on a free tier would exhaust credits quickly.
+
+## Storage Tradeoff: bun:sqlite → Turso
+
+The original implementation used `bun:sqlite` — SQLite built directly into the Bun runtime. This was the right call for local development: zero setup, no extra dependencies, native TypeScript types, synchronous API, and the database file lived alongside the code.
+
+The problem appeared on Azure. Every GitHub push triggers a Docker build and deploys a fresh container image. The SQLite file lived inside the container filesystem, so each new deployment started with an empty database — all tracked products, price history, and alerts were wiped on every push.
+
+The first attempt at a fix was mounting an Azure Files share at the database path (`/app/apt-backend/data`). This required no code changes and kept the `bun:sqlite` API intact. It failed in practice: the Azure Files volume mount caused the container to crash on startup due to cross-resource-group networking issues between the storage account and the Container Apps environment, and the container never reached a healthy state.
+
+The working solution was migrating to [Turso](https://turso.tech) — a hosted libSQL service that is wire-compatible with SQLite. The schema and all SQL queries are unchanged. The only code change was swapping the synchronous `bun:sqlite` API (`db.query().all()`, `db.run()`) for `@libsql/client`'s async equivalent (`await db.execute({ sql, args })`). Data now lives outside the container entirely and survives every deployment.
+
+The takeaway: `bun:sqlite` is the right default for local-first projects. As soon as the deployment model involves ephemeral containers, the database needs to live outside the image — either via a persistent volume mount (if the infrastructure cooperates) or a hosted service.
 
 ## Design And AI Notes
 

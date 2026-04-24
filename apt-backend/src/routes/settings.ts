@@ -12,7 +12,6 @@ interface Slot {
   scrape_interval_minutes?: number;
   geocode?: string;
   zipcode?: string;
-  // Per-product alert thresholds
   alert_enabled?: boolean;
   threshold_mode?: "percent" | "absolute" | "both";
   threshold_percent?: number;
@@ -24,64 +23,48 @@ function parseAsin(url: string): string | null {
   return match ? match[1].toUpperCase() : null;
 }
 
-interface SettingsRow {
-  id: number;
-  slot: number;
-  url: string | null;
-  name: string | null;
-  scrape_interval_minutes: number;
-  alert_enabled: number;
-  threshold_mode: string;
-  threshold_percent: number;
-  threshold_absolute: number;
-  geocode: string;
-  zipcode: string;
-}
-
 /**
  * GET /api/settings
  * Returns all 3 slot configurations from the DB (active only).
  * Empty slots are filled with defaults so the frontend always gets 3 rows.
  */
-settings.get("/", (c) => {
+settings.get("/", async (c) => {
   settingsLog.debug("fetching slot configuration");
-  const rows = db
-    .query<SettingsRow, []>(`
-      SELECT
-        tp.id,
-        tp.slot,
-        p.url,
-        p.name,
-        tp.scrape_interval_minutes,
-        tp.alert_enabled,
-        tp.threshold_mode,
-        tp.threshold_percent,
-        tp.threshold_absolute,
-        tp.geocode,
-        tp.zipcode
-      FROM tracked_products tp
-      LEFT JOIN products p ON p.asin = tp.asin
-      WHERE tp.is_active = 1
-      ORDER BY tp.slot ASC
-    `)
-    .all();
 
-  // Build a map of slot → row, then fill 3 slots
-  const bySlot = new Map(rows.map((r) => [r.slot, r]));
+  const result = await db.execute(`
+    SELECT
+      tp.id,
+      tp.slot,
+      p.url,
+      p.name,
+      tp.scrape_interval_minutes,
+      tp.alert_enabled,
+      tp.threshold_mode,
+      tp.threshold_percent,
+      tp.threshold_absolute,
+      tp.geocode,
+      tp.zipcode
+    FROM tracked_products tp
+    LEFT JOIN products p ON p.asin = tp.asin
+    WHERE tp.is_active = 1
+    ORDER BY tp.slot ASC
+  `);
+
+  const bySlot = new Map(result.rows.map((r) => [r.slot as number, r]));
   const slots = [1, 2, 3].map((slotNum) => {
     const row = bySlot.get(slotNum);
     if (row) {
       return {
         id: slotNum,
-        url: row.url ?? "",
-        name: row.name ?? "",
-        scrape_interval_minutes: row.scrape_interval_minutes,
-        alert_enabled: row.alert_enabled === 1,
-        threshold_mode: row.threshold_mode ?? "percent",
-        threshold_percent: row.threshold_percent ?? 5.0,
-        threshold_absolute: row.threshold_absolute ?? 0.0,
-        geocode: row.geocode,
-        zipcode: row.zipcode,
+        url: (row.url as string) ?? "",
+        name: (row.name as string) ?? "",
+        scrape_interval_minutes: row.scrape_interval_minutes as number,
+        alert_enabled: (row.alert_enabled as number) === 1,
+        threshold_mode: (row.threshold_mode as string) ?? "percent",
+        threshold_percent: (row.threshold_percent as number) ?? 5.0,
+        threshold_absolute: (row.threshold_absolute as number) ?? 0.0,
+        geocode: row.geocode as string,
+        zipcode: row.zipcode as string,
       };
     }
     return {
@@ -98,7 +81,7 @@ settings.get("/", (c) => {
     };
   });
 
-  settingsLog.debug({ activeSlots: rows.length }, "slot configuration fetched");
+  settingsLog.debug({ activeSlots: result.rows.length }, "slot configuration fetched");
   return c.json({ slots });
 });
 
@@ -132,7 +115,7 @@ settings.post("/", async (c) => {
   const results: { slot: number; status: string; asin?: string; error?: string }[] = [];
 
   for (const slot of slots) {
-    const slotNum = slot.id; // 1–3
+    const slotNum = slot.id;
     const url = slot.url?.trim() ?? "";
     const interval = slot.scrape_interval_minutes ?? 60;
     const geocode = (slot.geocode ?? "us").toLowerCase();
@@ -144,12 +127,11 @@ settings.post("/", async (c) => {
 
     const slotLog = settingsLog.child({ slot: slotNum });
 
-    // Empty URL → deactivate whatever was in this slot
     if (!url) {
-      db.run(
-        `UPDATE tracked_products SET is_active = 0 WHERE slot = ?`,
-        [slotNum]
-      );
+      await db.execute({
+        sql: `UPDATE tracked_products SET is_active = 0 WHERE slot = ?`,
+        args: [slotNum],
+      });
       slotLog.info("slot cleared (no URL)");
       results.push({ slot: slotNum, status: "cleared" });
       continue;
@@ -163,32 +145,29 @@ settings.post("/", async (c) => {
     }
 
     try {
-      // Check if this ASIN+region combo is already tracked
-      const existing = db
-        .query<{ id: number }, [string, string, string]>(
-          `SELECT id FROM tracked_products WHERE asin = ? AND geocode = ? AND zipcode = ?`
-        )
-        .get(asin, geocode, zipcode);
+      const existingResult = await db.execute({
+        sql: `SELECT id FROM tracked_products WHERE asin = ? AND geocode = ? AND zipcode = ?`,
+        args: [asin, geocode, zipcode],
+      });
+      const existing = existingResult.rows[0] ?? null;
 
       if (!existing) {
         slotLog.info({ asin, geocode, zipcode, interval }, "new product — fetching from Scrape.do");
-        // First time seeing this product — fetch from Scrape.do to seed data
         const data = await getProductDetails(asin, geocode, zipcode);
 
-        // Upsert into products
-        db.run(
-          `INSERT INTO products (asin, brand, name, url, thumbnail, currency, currency_symbol, technical_details, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-           ON CONFLICT(asin) DO UPDATE SET
-             brand = excluded.brand,
-             name = excluded.name,
-             url = excluded.url,
-             thumbnail = excluded.thumbnail,
-             currency = excluded.currency,
-             currency_symbol = excluded.currency_symbol,
-             technical_details = excluded.technical_details,
-             updated_at = unixepoch()`,
-          [
+        await db.execute({
+          sql: `INSERT INTO products (asin, brand, name, url, thumbnail, currency, currency_symbol, technical_details, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+                ON CONFLICT(asin) DO UPDATE SET
+                  brand = excluded.brand,
+                  name = excluded.name,
+                  url = excluded.url,
+                  thumbnail = excluded.thumbnail,
+                  currency = excluded.currency,
+                  currency_symbol = excluded.currency_symbol,
+                  technical_details = excluded.technical_details,
+                  updated_at = unixepoch()`,
+          args: [
             asin,
             data.brand ?? null,
             data.name ?? null,
@@ -197,30 +176,30 @@ settings.post("/", async (c) => {
             data.currency ?? "USD",
             data.currency_symbol ?? "$",
             JSON.stringify(data.technical_details ?? {}),
-          ]
-        );
+          ],
+        });
 
-        // Deactivate any previous tracked product in this slot
-        db.run(`UPDATE tracked_products SET is_active = 0 WHERE slot = ?`, [slotNum]);
+        await db.execute({
+          sql: `UPDATE tracked_products SET is_active = 0 WHERE slot = ?`,
+          args: [slotNum],
+        });
 
-        // Insert new tracked_product with alert thresholds
-        db.run(
-          `INSERT INTO tracked_products
-             (asin, slot, geocode, zipcode, scrape_interval_minutes, last_scraped_at, is_active,
-              alert_enabled, threshold_mode, threshold_percent, threshold_absolute)
-           VALUES (?, ?, ?, ?, ?, unixepoch(), 1, ?, ?, ?, ?)`,
-          [asin, slotNum, geocode, zipcode, interval,
-           alertEnabled, thresholdMode, thresholdPercent, thresholdAbsolute]
-        );
+        await db.execute({
+          sql: `INSERT INTO tracked_products
+                  (asin, slot, geocode, zipcode, scrape_interval_minutes, last_scraped_at, is_active,
+                   alert_enabled, threshold_mode, threshold_percent, threshold_absolute)
+                VALUES (?, ?, ?, ?, ?, unixepoch(), 1, ?, ?, ?, ?)`,
+          args: [asin, slotNum, geocode, zipcode, interval,
+                 alertEnabled, thresholdMode, thresholdPercent, thresholdAbsolute],
+        });
 
-        // Seed first price snapshot
-        db.run(
-          `INSERT INTO price_snapshots (asin, geocode, zipcode, price, list_price, rating, total_ratings, is_prime, is_sponsored, shipping_info, more_buying_choices)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            asin,
-            geocode,
-            zipcode,
+        await db.execute({
+          sql: `INSERT INTO price_snapshots
+                  (asin, geocode, zipcode, price, list_price, rating, total_ratings,
+                   is_prime, is_sponsored, shipping_info, more_buying_choices)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            asin, geocode, zipcode,
             data.price ?? null,
             data.list_price ?? null,
             data.rating ?? null,
@@ -229,24 +208,25 @@ settings.post("/", async (c) => {
             data.is_sponsored ? 1 : 0,
             JSON.stringify(data.shipping_info ?? []),
             JSON.stringify(data.more_buying_choices ?? null),
-          ]
-        );
+          ],
+        });
 
-        // Upsert images (replace all for this ASIN)
-        db.run(`DELETE FROM product_images WHERE asin = ?`, [asin]);
+        await db.execute({
+          sql: `DELETE FROM product_images WHERE asin = ?`,
+          args: [asin],
+        });
         for (const [i, img] of (data.images ?? []).entries()) {
-          db.run(
-            `INSERT INTO product_images (asin, url, width, height, display_order) VALUES (?, ?, ?, ?, ?)`,
-            [asin, img.url, img.width ?? null, img.height ?? null, i]
-          );
+          await db.execute({
+            sql: `INSERT INTO product_images (asin, url, width, height, display_order) VALUES (?, ?, ?, ?, ?)`,
+            args: [asin, img.url, img.width ?? null, img.height ?? null, i],
+          });
         }
 
-        // Insert best seller rankings snapshot
         for (const bsr of data.best_seller_rankings ?? []) {
-          db.run(
-            `INSERT INTO best_seller_rankings (asin, category, rank, geocode) VALUES (?, ?, ?, ?)`,
-            [asin, bsr.category, bsr.rank, geocode]
-          );
+          await db.execute({
+            sql: `INSERT INTO best_seller_rankings (asin, category, rank, geocode) VALUES (?, ?, ?, ?)`,
+            args: [asin, bsr.category, bsr.rank, geocode],
+          });
         }
 
         slotLog.info(
@@ -255,29 +235,26 @@ settings.post("/", async (c) => {
         );
         results.push({ slot: slotNum, status: "added", asin });
       } else {
-        // Already tracked — update settings including alert thresholds
-        db.run(
-          `UPDATE tracked_products
-           SET scrape_interval_minutes = ?, slot = ?, is_active = 1,
-               alert_enabled = ?, threshold_mode = ?, threshold_percent = ?, threshold_absolute = ?
-           WHERE asin = ? AND geocode = ? AND zipcode = ?`,
-          [interval, slotNum, alertEnabled, thresholdMode, thresholdPercent, thresholdAbsolute,
-           asin, geocode, zipcode]
-        );
+        await db.execute({
+          sql: `UPDATE tracked_products
+                SET scrape_interval_minutes = ?, slot = ?, is_active = 1,
+                    alert_enabled = ?, threshold_mode = ?, threshold_percent = ?, threshold_absolute = ?
+                WHERE asin = ? AND geocode = ? AND zipcode = ?`,
+          args: [interval, slotNum, alertEnabled, thresholdMode, thresholdPercent, thresholdAbsolute,
+                 asin, geocode, zipcode],
+        });
 
-        // Deactivate any *other* product that was previously in this slot
-        db.run(
-          `UPDATE tracked_products SET is_active = 0
-           WHERE slot = ? AND NOT (asin = ? AND geocode = ? AND zipcode = ?)`,
-          [slotNum, asin, geocode, zipcode]
-        );
+        await db.execute({
+          sql: `UPDATE tracked_products SET is_active = 0
+                WHERE slot = ? AND NOT (asin = ? AND geocode = ? AND zipcode = ?)`,
+          args: [slotNum, asin, geocode, zipcode],
+        });
 
-        // Update display name if provided
         if (slot.name) {
-          db.run(`UPDATE products SET name = ?, updated_at = unixepoch() WHERE asin = ?`, [
-            slot.name,
-            asin,
-          ]);
+          await db.execute({
+            sql: `UPDATE products SET name = ?, updated_at = unixepoch() WHERE asin = ?`,
+            args: [slot.name, asin],
+          });
         }
 
         slotLog.info({ asin, interval, alertEnabled, thresholdMode }, "product settings updated");

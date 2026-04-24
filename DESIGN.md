@@ -22,7 +22,7 @@ Tradeoff:
 
 Why I still chose SQLite: For a system tracking three products with one scheduler process, SQLite was the fastest path to a credible durable design. I would migrate to PostgreSQL if this needed multiple workers, deployment across machines, or materially higher write volume.
 
-The container persistence problem (SQLite being wiped on each redeploy) was solved without changing any application code by mounting an Azure Files share at `/app/apt-backend/data` in the Container Apps environment. The database path in `db/index.ts` already pointed to that directory, so no code changes were needed. This keeps the simplicity of SQLite while giving the deployment the durability of networked storage.
+The container persistence problem (SQLite being wiped on each redeploy) was initially approached by mounting an Azure Files share, but cross-resource-group networking issues prevented the container from starting. The solution was migrating to [Turso](https://turso.tech) — a hosted libSQL service that is wire-compatible with SQLite. The schema and all SQL queries are unchanged. The only code change was swapping `bun:sqlite`'s synchronous API for `@libsql/client`'s async `await db.execute()` calls across routes and the scheduler. This keeps the simplicity of SQLite semantics while solving persistence with zero infrastructure to manage.
 
 ## Tradeoff 2: `setInterval` scheduler vs queue/cron job system
 

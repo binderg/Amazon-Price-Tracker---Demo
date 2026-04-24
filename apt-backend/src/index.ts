@@ -9,9 +9,7 @@ import settings from "./routes/settings";
 import alerts from "./routes/alerts";
 import sse from "./routes/sse";
 import { startScheduler } from "./services/scheduler";
-
-// Import DB so tables are created on startup
-import "./db/index";
+import { initDb } from "./db/index";
 
 const app = new Hono();
 
@@ -59,8 +57,13 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error" }, 500);
 });
 
-// ─── Scheduler ────────────────────────────────────────────────────────────────
-startScheduler();
+// ─── DB init + Scheduler ──────────────────────────────────────────────────────
+initDb()
+  .then(() => startScheduler())
+  .catch((err) => {
+    logger.error({ err: err.message }, "failed to initialise database — exiting");
+    process.exit(1);
+  });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT ?? 3000);

@@ -5,22 +5,13 @@
  *
  * Every POLL_INTERVAL_MS the scheduler:
  *   1. Queries tracked_products for rows that are due for a scrape
- *      (last_scraped_at IS NULL  OR  age >= scrape_interval_minutes * 60 seconds)
  *   2. For each due product, calls Scrape.do via getProductDetails()
  *   3. Inserts a new price_snapshot row
  *   4. Updates last_scraped_at
  *   5. Compares the new price against the previous snapshot
  *   6. If a drop exceeds the configured threshold → inserts a price_drop_event
- *      and broadcasts a  price_drop  SSE event
- *   7. Always broadcasts a  price_update  SSE event so connected dashboards
- *      refresh their charts in real time
- *
- * SSE event shapes (match what useSSE.js / usePriceData.js expect):
- *
- *   price_update → { product_id, current_price, previous_price, checked_at }
- *   price_drop   → { product_id, product_name, product_url,
- *                    current_price, previous_price,
- *                    drop_amount, drop_percent, checked_at }
+ *      and broadcasts a price_drop SSE event
+ *   7. Always broadcasts a price_update SSE event
  */
 
 import { db } from "../db/index";
@@ -29,71 +20,49 @@ import { broadcast } from "./sseManager";
 import { checkPriceDrop } from "./detector";
 import { schedLog } from "../logger";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface DueProduct {
-  id: number;
-  asin: string;
-  geocode: string;
-  zipcode: string;
-  scrape_interval_minutes: number;
-  alert_enabled: number;
-  threshold_mode: string;
-  threshold_percent: number;
-  threshold_absolute: number;
-  name: string | null;
-  url: string | null;
-}
-
-interface PriceRow {
-  price: number | null;
-}
-
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-/** How often to check for due products (ms). 60 s is fine-grained enough. */
 const POLL_INTERVAL_MS = 60_000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getDueProducts(): DueProduct[] {
-  return db
-    .query<DueProduct, []>(`
-      SELECT
-        tp.id,
-        tp.asin,
-        tp.geocode,
-        tp.zipcode,
-        tp.scrape_interval_minutes,
-        tp.alert_enabled,
-        tp.threshold_mode,
-        tp.threshold_percent,
-        tp.threshold_absolute,
-        p.name,
-        p.url
-      FROM tracked_products tp
-      LEFT JOIN products p ON p.asin = tp.asin
-      WHERE tp.is_active = 1
-        AND (
-          tp.last_scraped_at IS NULL
-          OR (unixepoch() - tp.last_scraped_at) >= tp.scrape_interval_minutes * 60
-        )
-    `)
-    .all();
+async function getDueProducts() {
+  const result = await db.execute(`
+    SELECT
+      tp.id,
+      tp.asin,
+      tp.geocode,
+      tp.zipcode,
+      tp.scrape_interval_minutes,
+      tp.alert_enabled,
+      tp.threshold_mode,
+      tp.threshold_percent,
+      tp.threshold_absolute,
+      p.name,
+      p.url
+    FROM tracked_products tp
+    LEFT JOIN products p ON p.asin = tp.asin
+    WHERE tp.is_active = 1
+      AND (
+        tp.last_scraped_at IS NULL
+        OR (unixepoch() - tp.last_scraped_at) >= tp.scrape_interval_minutes * 60
+      )
+  `);
+  return result.rows;
 }
 
-/**
- * Scrape a single product, persist the snapshot, detect price drops,
- * and push SSE events to all connected clients.
- */
-async function scrapeProduct(product: DueProduct): Promise<void> {
+async function scrapeProduct(product: Record<string, any>): Promise<void> {
   const log = schedLog.child({ asin: product.asin, id: product.id });
 
   log.info("scraping price");
 
   let data;
   try {
-    data = await getProductDetails(product.asin, product.geocode, product.zipcode);
+    data = await getProductDetails(
+      product.asin as string,
+      product.geocode as string,
+      product.zipcode as string
+    );
   } catch (err: any) {
     log.error({ err: err.message }, "scrape failed — skipping snapshot");
     return;
@@ -102,25 +71,22 @@ async function scrapeProduct(product: DueProduct): Promise<void> {
   const newPrice = data.price ?? null;
   const now = Math.floor(Date.now() / 1000);
 
-  // ── Fetch previous price before inserting the new snapshot ────────────────
-  const prevRow = db
-    .query<PriceRow, [string, string, string]>(`
-      SELECT price FROM price_snapshots
-      WHERE asin = ? AND geocode = ? AND zipcode = ?
-      ORDER BY scraped_at DESC
-      LIMIT 1
-    `)
-    .get(product.asin, product.geocode, product.zipcode);
+  // Fetch previous price before inserting the new snapshot
+  const prevResult = await db.execute({
+    sql: `SELECT price FROM price_snapshots
+          WHERE asin = ? AND geocode = ? AND zipcode = ?
+          ORDER BY scraped_at DESC LIMIT 1`,
+    args: [product.asin, product.geocode, product.zipcode],
+  });
+  const prevPrice = (prevResult.rows[0]?.price as number | null) ?? null;
 
-  const prevPrice = prevRow?.price ?? null;
-
-  // ── Insert new snapshot ───────────────────────────────────────────────────
-  db.run(
-    `INSERT INTO price_snapshots
-       (asin, geocode, zipcode, price, list_price, rating, total_ratings,
-        is_prime, is_sponsored, shipping_info, more_buying_choices)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+  // Insert new snapshot
+  await db.execute({
+    sql: `INSERT INTO price_snapshots
+            (asin, geocode, zipcode, price, list_price, rating, total_ratings,
+             is_prime, is_sponsored, shipping_info, more_buying_choices)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
       product.asin,
       product.geocode,
       product.zipcode,
@@ -132,17 +98,19 @@ async function scrapeProduct(product: DueProduct): Promise<void> {
       data.is_sponsored ? 1 : 0,
       JSON.stringify(data.shipping_info ?? []),
       JSON.stringify(data.more_buying_choices ?? null),
-    ]
-  );
+    ],
+  });
 
-  // ── Update last_scraped_at ────────────────────────────────────────────────
-  db.run(`UPDATE tracked_products SET last_scraped_at = ? WHERE id = ?`, [now, product.id]);
+  // Update last_scraped_at
+  await db.execute({
+    sql: `UPDATE tracked_products SET last_scraped_at = ? WHERE id = ?`,
+    args: [now, product.id],
+  });
 
   log.info({ newPrice, prevPrice }, "snapshot saved");
 
   const checkedAt = new Date().toISOString();
 
-  // ── Broadcast price_update to all connected SSE clients ───────────────────
   broadcast("price_update", {
     product_id: product.id,
     current_price: newPrice,
@@ -150,27 +118,25 @@ async function scrapeProduct(product: DueProduct): Promise<void> {
     checked_at: checkedAt,
   });
 
-  // ── Price-drop detection ──────────────────────────────────────────────────
   const dropResult = checkPriceDrop({
     newPrice,
     prevPrice,
-    alert_enabled: product.alert_enabled,
-    threshold_mode: product.threshold_mode,
-    threshold_percent: product.threshold_percent,
-    threshold_absolute: product.threshold_absolute,
+    alert_enabled: product.alert_enabled as number,
+    threshold_mode: product.threshold_mode as string,
+    threshold_percent: product.threshold_percent as number,
+    threshold_absolute: product.threshold_absolute as number,
   });
 
   if (dropResult?.triggered) {
     const { dropAmount, dropPercent } = dropResult;
-    const mode = product.threshold_mode;
+    const mode = product.threshold_mode as string;
 
-    // Persist the event
-    db.run(
-      `INSERT INTO price_drop_events
-         (asin, geocode, zipcode, previous_price, current_price,
-          drop_amount, drop_percent, threshold_mode)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+    await db.execute({
+      sql: `INSERT INTO price_drop_events
+              (asin, geocode, zipcode, previous_price, current_price,
+               drop_amount, drop_percent, threshold_mode)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
         product.asin,
         product.geocode,
         product.zipcode,
@@ -179,16 +145,15 @@ async function scrapeProduct(product: DueProduct): Promise<void> {
         dropAmount,
         dropPercent,
         mode,
-      ]
-    );
+      ],
+    });
 
     log.info({ dropAmount, dropPercent, mode }, "price drop detected — broadcasting");
 
-    // Push price_drop SSE event (shape matches useAlerts.js addAlert())
     broadcast("price_drop", {
       product_id: product.id,
-      product_name: product.name ?? product.asin,
-      product_url: product.url ?? `https://www.amazon.com/dp/${product.asin}`,
+      product_name: (product.name as string) ?? product.asin,
+      product_url: (product.url as string) ?? `https://www.amazon.com/dp/${product.asin}`,
       current_price: newPrice,
       previous_price: prevPrice,
       drop_amount: dropAmount,
@@ -200,39 +165,20 @@ async function scrapeProduct(product: DueProduct): Promise<void> {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-/**
- * Immediately scrape a single product by its tracked_products.id.
- * Used by POST /api/products/:id/check so reviewers (and the panel) can
- * trigger the full check → snapshot → detect → broadcast loop on demand
- * without waiting for the next scheduled tick.
- *
- * Returns `{ found: false }` when the id doesn't exist or is inactive,
- * `{ found: true }` after the scrape attempt (the scrape itself may still
- * fail internally; failures are logged and do not throw to the caller).
- */
-export async function checkProductById(
-  id: number
-): Promise<{ found: boolean }> {
-  const product = db
-    .query<DueProduct, [number]>(
-      `SELECT
-         tp.id,
-         tp.asin,
-         tp.geocode,
-         tp.zipcode,
-         tp.scrape_interval_minutes,
-         tp.alert_enabled,
-         tp.threshold_mode,
-         tp.threshold_percent,
-         tp.threshold_absolute,
-         p.name,
-         p.url
-       FROM tracked_products tp
-       LEFT JOIN products p ON p.asin = tp.asin
-       WHERE tp.id = ? AND tp.is_active = 1`
-    )
-    .get(id);
+export async function checkProductById(id: number): Promise<{ found: boolean }> {
+  const result = await db.execute({
+    sql: `SELECT
+            tp.id, tp.asin, tp.geocode, tp.zipcode,
+            tp.scrape_interval_minutes, tp.alert_enabled,
+            tp.threshold_mode, tp.threshold_percent, tp.threshold_absolute,
+            p.name, p.url
+          FROM tracked_products tp
+          LEFT JOIN products p ON p.asin = tp.asin
+          WHERE tp.id = ? AND tp.is_active = 1`,
+    args: [id],
+  });
 
+  const product = result.rows[0] ?? null;
   if (!product) return { found: false };
 
   schedLog.info({ id, asin: product.asin }, "manual check triggered");
@@ -243,7 +189,7 @@ export async function checkProductById(
 // ─── Main loop ────────────────────────────────────────────────────────────────
 
 async function tick(): Promise<void> {
-  const due = getDueProducts();
+  const due = await getDueProducts();
 
   if (due.length === 0) {
     schedLog.debug("no products due for scrape");
@@ -252,20 +198,14 @@ async function tick(): Promise<void> {
 
   schedLog.info({ count: due.length }, "scraping due products");
 
-  // Scrape sequentially to avoid hammering the upstream API
   for (const product of due) {
     await scrapeProduct(product);
   }
 }
 
-/**
- * Start the scheduler. Call once at server boot.
- * Runs an immediate tick, then repeats every POLL_INTERVAL_MS.
- */
 export function startScheduler(): void {
   schedLog.info({ pollIntervalMs: POLL_INTERVAL_MS }, "scheduler started");
 
-  // Kick off immediately so newly-started servers don't wait a full minute
   tick().catch((err: any) =>
     schedLog.error({ err: err.message }, "scheduler tick error")
   );

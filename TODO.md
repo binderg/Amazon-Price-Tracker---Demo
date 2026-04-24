@@ -111,11 +111,12 @@ Status key: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ## ✅ Completed
 
-- [x] **Persistent SQLite storage on Azure**
-  - Azure Files share (`sqlite-data`) mounted at `/app/apt-backend/data` in the Container Apps environment
-  - Database survives container replacement and redeployments
-  - No code changes required — mount path matches existing `db/index.ts` hardcoded path
-  - Storage account: `pricewatchdb2026`, environment binding: `sqlite-storage-mount`
+- [x] **Persistent database via Turso (hosted libSQL)**
+  - Migrated from `bun:sqlite` (ephemeral container filesystem) to `@libsql/client` (Turso)
+  - Schema and all SQL queries unchanged — libSQL is wire-compatible with SQLite
+  - All `db.query().all()` / `db.run()` calls converted to `await db.execute({ sql, args })`
+  - `TURSO_URL` and `TURSO_TOKEN` injected as env vars via GitHub secrets + Azure Container App
+  - Database persists across all container replacements and redeployments
 
 - [x] Backend server setup (Hono + Bun + CORS + API key auth)
 - [x] Price scraping scheduler (`services/scheduler.ts`) — 60 s poll, per-product intervals
