@@ -58,6 +58,7 @@ jobs:
           test -n "${{ secrets.VITE_API_KEY }}" || (echo "Missing VITE_API_KEY" && exit 1)
           test -n "${{ secrets.TURSO_URL }}" || (echo "Missing TURSO_URL" && exit 1)
           test -n "${{ secrets.TURSO_TOKEN }}" || (echo "Missing TURSO_TOKEN" && exit 1)
+          test -n "${{ secrets.SCRAPE_DO_TOKEN }}" || (echo "Missing SCRAPE_DO_TOKEN" && exit 1)
 
       - name: Print deployment target
         run: |
@@ -84,6 +85,7 @@ jobs:
                 "API_KEY=${{ secrets.VITE_API_KEY }}" \
                 "TURSO_URL=${{ secrets.TURSO_URL }}" \
                 "TURSO_TOKEN=${{ secrets.TURSO_TOKEN }}" \
+                "SCRAPE_DO_TOKEN=${{ secrets.SCRAPE_DO_TOKEN }}" \
             || \
             az containerapp create \
               --name "${{ env.CONTAINER_APP_NAME }}" \
@@ -100,4 +102,5 @@ jobs:
               --env-vars \
                 "API_KEY=${{ secrets.VITE_API_KEY }}" \
                 "TURSO_URL=${{ secrets.TURSO_URL }}" \
-                "TURSO_TOKEN=${{ secrets.TURSO_TOKEN }}"
+                "TURSO_TOKEN=${{ secrets.TURSO_TOKEN }}" \
+                "SCRAPE_DO_TOKEN=${{ secrets.SCRAPE_DO_TOKEN }}"
