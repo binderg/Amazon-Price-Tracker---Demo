@@ -119,16 +119,6 @@ export default function ProductDetailModal({ product, visible, onHide }) {
                 }
                 highlight={changeColor}
               />
-              <StatRow
-                label="30-day Low"
-                value={formatPrice(stats?.min)}
-                highlight="text-emerald-600"
-              />
-              <StatRow
-                label="30-day High"
-                value={formatPrice(stats?.max)}
-                highlight="text-red-500"
-              />
               <StatRow label="30-day Avg" value={formatPrice(stats?.avg)} />
             </div>
           </div>
