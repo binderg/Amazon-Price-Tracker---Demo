@@ -46,7 +46,7 @@ function StatRow({ label, value, highlight }) {
  * }} props
  */
 export default function ProductDetailModal({ product, visible, onHide }) {
-  const [range, setRange] = useState("30d");
+  const [range, setRange] = useState("7d");
 
   if (!product) return null;
 

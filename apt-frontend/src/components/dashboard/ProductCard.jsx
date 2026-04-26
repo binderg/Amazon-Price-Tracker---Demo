@@ -187,35 +187,34 @@ const ProductCard = memo(function ProductCard({ product, onViewHistory, onToggle
               <button
                 onClick={handleCheckNow}
                 disabled={checking}
-                title="Trigger an immediate price check"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-violet-600 hover:text-violet-700 hover:bg-violet-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title={checking ? 'Checking…' : 'Trigger an immediate price check'}
+                className="flex items-center justify-center w-7 h-7 rounded-lg text-violet-500 hover:text-violet-700 hover:bg-violet-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
-                {checking ? 'Checking…' : 'Check Now'}
               </button>
             )}
             {onTogglePause && (
               <button
                 onClick={() => onTogglePause(product)}
                 title={active ? 'Pause tracking' : 'Resume tracking'}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer ${
                   active
-                    ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
-                    : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                    ? 'text-amber-500 hover:text-amber-700 hover:bg-amber-50'
+                    : 'text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50'
                 }`}
               >
                 {active
-                  ? <><PauseCircle className="w-3.5 h-3.5" /> Pause</>
-                  : <><PlayCircle className="w-3.5 h-3.5" /> Resume</>
+                  ? <PauseCircle className="w-3.5 h-3.5" />
+                  : <PlayCircle className="w-3.5 h-3.5" />
                 }
               </button>
             )}
             <button
               onClick={() => onViewHistory(product)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors cursor-pointer"
+              title="View price history"
+              className="flex items-center justify-center w-7 h-7 rounded-lg text-slate-500 bg-slate-100 hover:text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
             >
               <BarChart2 className="w-3.5 h-3.5" />
-              History
             </button>
           </div>
         </div>

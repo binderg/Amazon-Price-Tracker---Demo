@@ -115,7 +115,7 @@ function ComparisonTooltip({ active, payload, label, productMap }) {
  * @param {{ products: object[] }} props
  */
 export default function ComparisonChart({ products = [] }) {
-  const [rangeDays, setRangeDays] = useState(30)
+  const [rangeDays, setRangeDays] = useState(7)
 
   // Default: all active products selected
   const [selectedAsins, setSelectedAsins] = useState(() =>
