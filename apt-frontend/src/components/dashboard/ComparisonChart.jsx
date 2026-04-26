@@ -20,7 +20,7 @@ import {
 import { MultiSelect } from 'primereact/multiselect'
 import { GitCompareArrows } from 'lucide-react'
 import { formatPrice } from '../../api/mockData'
-import { shortDate, fullDateTime } from '../utils/time'
+import { fullDateTime, smartAxisTick } from '../utils/time'
 
 // One colour per slot — consistent regardless of which products are selected
 const SLOT_COLORS = ['#3b82f6', '#10b981', '#8b5cf6']
@@ -28,45 +28,46 @@ const SLOT_COLORS = ['#3b82f6', '#10b981', '#8b5cf6']
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Merges price histories from multiple products into rows keyed by date.
- * Missing data for a product on a given date is stored as null so recharts
- * can connect or break the line gracefully.
+ * Merges price histories from multiple products into rows keyed by timestamp.
+ * Each unique timestamp across all products becomes a row; missing products
+ * at that timestamp get null so recharts can connect lines gracefully.
  *
  * @param {object[]} products  Full product objects with .priceHistory
  * @param {number}   days      Number of days to show (from today backwards)
- * @returns {{ date: string; [asin: string]: number | null }[]}
+ * @returns {{ timestamp: string; [asin: string]: number | null }[]}
  */
 function buildComparisonData(products, days) {
   if (!products.length) return []
 
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - days)
-  const cutoffStr = cutoff.toISOString().split('T')[0]
+  const cutoffTs = cutoff.toISOString()
 
-  // Collect every date across all products within the range
-  const dateSet = new Set()
+  // Collect every timestamp across all products within the range
+  const tsSet = new Set()
   for (const p of products) {
     for (const h of p.priceHistory ?? []) {
-      if (h.date >= cutoffStr) dateSet.add(h.date)
+      const ts = h.timestamp ?? h.date
+      if (ts >= cutoffTs) tsSet.add(ts)
     }
   }
 
-  const sortedDates = [...dateSet].sort()
+  const sortedTs = [...tsSet].sort()
 
-  // Build a lookup: asin → Map<date, price>
+  // Build a lookup: asin → Map<timestamp, price>
   const lookup = {}
   for (const p of products) {
     lookup[p.asin] = new Map(
       (p.priceHistory ?? [])
-        .filter((h) => h.date >= cutoffStr)
-        .map((h) => [h.date, h.price])
+        .filter((h) => (h.timestamp ?? h.date) >= cutoffTs)
+        .map((h) => [h.timestamp ?? h.date, h.price])
     )
   }
 
-  return sortedDates.map((date) => {
-    const row = { date }
+  return sortedTs.map((ts) => {
+    const row = { timestamp: ts }
     for (const p of products) {
-      row[p.asin] = lookup[p.asin].get(date) ?? null
+      row[p.asin] = lookup[p.asin].get(ts) ?? null
     }
     return row
   })
@@ -78,7 +79,7 @@ function ComparisonTooltip({ active, payload, label, productMap }) {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-lg px-4 py-3 min-w-44">
-      <p className="text-xs text-slate-400 mb-2 font-medium">{shortDate(label)}</p>
+      <p className="text-xs text-slate-400 mb-2 font-medium">{fullDateTime(label)}</p>
       {payload
         .filter((e) => e.value != null)
         .map((entry) => {
@@ -152,6 +153,12 @@ export default function ComparisonChart({ products = [] }) {
 
   const hasData = chartData.length >= 2 && selectedProducts.length > 0
 
+  const isSameDay = chartData.length > 0 && (() => {
+    const first = new Date(chartData[0].timestamp).toDateString()
+    const last = new Date(chartData[chartData.length - 1].timestamp).toDateString()
+    return first === last
+  })()
+
   // Multi-select item template with colour dot
   const itemTemplate = (option) => (
     <div className="flex items-center gap-2">
@@ -211,8 +218,8 @@ export default function ComparisonChart({ products = [] }) {
             <LineChart data={chartData} margin={{ top: 8, right: 24, bottom: 0, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis
-                dataKey="date"
-                tickFormatter={(v) => shortDate(v)}
+                dataKey="timestamp"
+                tickFormatter={(v) => smartAxisTick(v, isSameDay)}
                 tick={{ fontSize: 11, fill: '#94a3b8' }}
                 axisLine={false}
                 tickLine={false}

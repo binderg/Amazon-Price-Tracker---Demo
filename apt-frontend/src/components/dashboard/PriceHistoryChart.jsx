@@ -16,7 +16,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { formatPrice } from '../../api/mockData'
-import { shortDate, fullDateTime } from '../utils/time'
+import { fullDateTime, smartAxisTick } from '../utils/time'
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
@@ -55,6 +55,13 @@ function CustomDot(props) {
 export default function PriceHistoryChart({ history = [], currentPrice }) {
   const slice = history
 
+  // Detect if all points are within the same calendar day → show time on axis
+  const isSameDay = slice.length > 0 && (() => {
+    const first = new Date(slice[0].timestamp ?? slice[0].date).toDateString()
+    const last = new Date(slice[slice.length - 1].timestamp ?? slice[slice.length - 1].date).toDateString()
+    return first === last
+  })()
+
   if (slice.length < 2) {
     return (
       <div className="h-64 flex items-center justify-center text-sm text-slate-400 italic">
@@ -87,8 +94,8 @@ export default function PriceHistoryChart({ history = [], currentPrice }) {
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
         <XAxis
-          dataKey="date"
-          tickFormatter={(v) => shortDate(v)}
+          dataKey="timestamp"
+          tickFormatter={(v) => smartAxisTick(v, isSameDay)}
           tick={{ fontSize: 11, fill: '#94a3b8' }}
           axisLine={false}
           tickLine={false}

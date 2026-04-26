@@ -29,3 +29,16 @@ export function fullDateTime(isoString) {
     minute: '2-digit',
   })
 }
+
+/**
+ * Smart axis tick: if all points are same day show "2:30 PM",
+ * otherwise show "Apr 26".
+ * Pass isSameDay=true when the whole dataset spans ≤1 day.
+ */
+export function smartAxisTick(isoString, isSameDay) {
+  const d = new Date(isoString)
+  if (isSameDay) {
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  }
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
