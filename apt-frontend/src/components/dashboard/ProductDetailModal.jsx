@@ -119,7 +119,6 @@ export default function ProductDetailModal({ product, visible, onHide }) {
                 }
                 highlight={changeColor}
               />
-              <StatRow label="30-day Avg" value={formatPrice(stats?.avg)} />
             </div>
           </div>
 
