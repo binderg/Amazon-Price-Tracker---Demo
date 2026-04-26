@@ -55,6 +55,7 @@ jobs:
           test -n "${{ vars.AZURE_RESOURCE_GROUP }}" || (echo "Missing AZURE_RESOURCE_GROUP" && exit 1)
           test -n "${{ vars.AZURE_CONTAINER_APP_NAME }}" || (echo "Missing AZURE_CONTAINER_APP_NAME" && exit 1)
           test -n "${{ secrets.AZURE_CREDENTIALS }}" || (echo "Missing AZURE_CREDENTIALS" && exit 1)
+          test -n "${{ secrets.VITE_API_KEY }}" || (echo "Missing VITE_API_KEY" && exit 1)
           test -n "${{ secrets.TURSO_URL }}" || (echo "Missing TURSO_URL" && exit 1)
           test -n "${{ secrets.TURSO_TOKEN }}" || (echo "Missing TURSO_TOKEN" && exit 1)
 
@@ -80,6 +81,7 @@ jobs:
               --min-replicas 1 \
               --max-replicas 1 \
               --set-env-vars \
+                "API_KEY=${{ secrets.VITE_API_KEY }}" \
                 "TURSO_URL=${{ secrets.TURSO_URL }}" \
                 "TURSO_TOKEN=${{ secrets.TURSO_TOKEN }}" \
             || \
@@ -96,5 +98,6 @@ jobs:
               --min-replicas 1 \
               --max-replicas 1 \
               --env-vars \
+                "API_KEY=${{ secrets.VITE_API_KEY }}" \
                 "TURSO_URL=${{ secrets.TURSO_URL }}" \
                 "TURSO_TOKEN=${{ secrets.TURSO_TOKEN }}"
