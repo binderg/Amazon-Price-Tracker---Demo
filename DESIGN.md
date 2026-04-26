@@ -43,6 +43,8 @@ Tradeoff:
 
 Why I still chose it: The exercise explicitly values clear tradeoffs over unnecessary complexity. For a reviewer running the app locally, an in-process scheduler is easy to verify and reason about. If I were taking this further, I would move scheduling into a durable job mechanism or external scheduler and add idempotency around alert generation.
 
+Deployment consequence: because the scheduler lives inside the API process, the container cannot scale to zero — a cold start would kill the SSE connection and orphan any in-flight check cycles. The GitHub Actions deploy sets `--min-replicas 1` to keep one replica alive at all times (~$3–5/month on Azure Container Apps). Moving the scheduler out of the API process would remove this constraint and allow scale-to-zero.
+
 ## Tradeoff 3: In-app notifications vs external email/Slack delivery
 
 I chose in-app notifications delivered through SSE, browser toast messages, and an alerts sidebar.
