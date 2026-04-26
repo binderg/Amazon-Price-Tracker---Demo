@@ -13,14 +13,12 @@ Why:
 -   zero setup for a take-home exercise
 -   durable file-based history that survives process restarts
 -   simple schema and queries for product metadata, snapshots, and alert events
--   built directly into Bun, which reduced infrastructure and library overhead
 
 Tradeoff:
 
 -   SQLite is a poor fit if this grew into a multi-user or multi-writer system with heavier concurrency
 -   PostgreSQL would be the better choice at larger scale for operational tooling, backups, concurrency, and analytics
 
-Why I still chose SQLite: For a system tracking three products with one scheduler process, SQLite was the fastest path to a credible durable design. I would migrate to PostgreSQL if this needed multiple workers, deployment across machines, or materially higher write volume.
 
 The container persistence problem (SQLite being wiped on each redeploy) was initially approached by mounting an Azure Files share, but cross-resource-group networking issues prevented the container from starting. The solution was migrating to [Turso](https://turso.tech) — a hosted libSQL service that is wire-compatible with SQLite. The schema and all SQL queries are unchanged. The only code change was swapping `bun:sqlite`'s synchronous API for `@libsql/client`'s async `await db.execute()` calls across routes and the scheduler. This keeps the simplicity of SQLite semantics while solving persistence with zero infrastructure to manage.
 
@@ -45,14 +43,15 @@ Why I still chose it: The exercise explicitly values clear tradeoffs over unnece
 
 Deployment consequence: because the scheduler lives inside the API process, the container cannot scale to zero — a cold start would kill the SSE connection and orphan any in-flight check cycles. The GitHub Actions deploy sets `--min-replicas 1` to keep one replica alive at all times (~$3–5/month on Azure Container Apps). Moving the scheduler out of the API process would remove this constraint and allow scale-to-zero.
 
-## Tradeoff 3: In-app notifications vs external email/Slack delivery
+## Tradeoff 3: In-app notifications via SSE vs external email/Slack
 
 I chose in-app notifications delivered through SSE, browser toast messages, and an alerts sidebar.
 
 Why:
 
 -   easy for a reviewer to verify end to end without needing email credentials, SMS providers, or webhook setup
--   fits the dashboard-oriented product shape of the application
+-   fits the dashboard-oriented product shape
+-   the in-process scheduler already runs continuously and naturally feeds the event stream — no external cron job needed
 -   allowed real-time UX without introducing a second outbound integration surface
 
 Tradeoff:
@@ -60,8 +59,9 @@ Tradeoff:
 -   it is not a true out-of-band notification channel
 -   if the dashboard is closed, the user will not see the alert immediately
 -   it does not satisfy production-style notification reliability requirements on its own
+-   because the scheduler lives inside the API process, the container cannot scale to zero (cold start would orphan in-flight check cycles). The deploy keeps `--min-replicas 1` to prevent this (~$3–5/month on Azure Container Apps). Moving the scheduler to a separate durable job service would allow scale-to-zero.
 
-Why I still chose it: The brief allowed any notification method that a reviewer could verify. For a short take-home, a live in-app channel was the best balance between demonstrability and implementation time. In a fuller system, I would add email or likely webhooks as configurable channels and make the notification method explicitly selectable in config.
+Why I still chose it: The brief allowed any notification method a reviewer could verify. For a short take-home, in-app was the best balance between simplicity and demonstrability. In a production system, I would add email or webhooks as configurable channels and move the scheduler to a separate always-on worker.
 
 ## Tradeoff 4: Scrape.do API vs direct scraping
 

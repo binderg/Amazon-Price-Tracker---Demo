@@ -20,20 +20,22 @@ This repository is a technical exercise only.
 ## Stack
 
 - **Backend:** Bun + Hono
-- **Database:** SQLite via `bun:sqlite`
-- **Frontend:** React + Vite
+- **Database:** Turso (hosted libSQL — SQLite-compatible)
+- **Frontend:** React
+- **Build tool:** Vite (dev build & static hosting in container)
 - **Charts:** Recharts
 - **Logging:** Pino
 - **Real-time updates:** Server-Sent Events (SSE)
-- **Scraping source:** Scrape.do Amazon PDP API
+- **Scraping:** Scrape.do Amazon PDP API
 
 ## Why These Choices
 
-- **Bun + Hono:** very fast local iteration, minimal boilerplate, native TypeScript support
-- **SQLite:** durable local storage with zero infrastructure overhead for a take-home sized project
-- **React + Vite:** quick UI development for a dashboard and settings workflow
-- **SSE:** simpler than WebSockets for one-way live updates from backend to browser
-- **Scrape.do:** avoids brittle raw HTML parsing and anti-bot handling during a short implementation window
+- **Bun + Hono:** fast iteration, minimal boilerplate, native TypeScript
+- **Turso (external DB):** SQLite simplicity without infrastructure, but database lives outside container so code pushes don't wipe data. Azure volumes add complexity; hosted service is simpler.
+- **React:** fast dashboard & settings UI
+- **Vite:** builds frontend assets for production container; Hono serves the built `dist/` folder alongside API routes
+- **SSE:** simpler than WebSockets for one-way updates. Server always-on scheduler naturally feeds events; no external cron job needed.
+- **Scrape.do:** avoids HTML selector fragility during a short timeline
 
 ## Features
 
@@ -152,11 +154,49 @@ curl -X POST http://localhost:3000/api/products/1/check \
    - a toast notification fires in the top-right corner
    - the product card price and chart update in real time via SSE
 
-## Docker And Azure Deployment
+## Deployment
 
-This repo now includes a single-container deployment path.
+### Local + GitHub Actions → Azure
 
-### Single container
+Push to `main` triggers GitHub Actions workflow:
+1. Builds Docker image (compiles React frontend with Vite, copies assets, builds Bun backend)
+2. Pushes to Azure Container Registry (ACR)
+3. Deploys new image to Azure Container Apps
+
+Database persists via Turso; code pushes don't wipe data.
+
+Required GitHub secrets:
+- `TURSO_URL` — libSQL database endpoint
+- `TURSO_TOKEN` — auth token
+- `ACR_USERNAME`, `ACR_PASSWORD` — container registry credentials
+- `AZURE_CREDENTIALS` — service principal JSON for deployments
+- `VITE_API_KEY` — frontend API key (must match backend `API_KEY`)
+
+Required GitHub variables:
+- `ACR_LOGIN_SERVER`, `IMAGE_NAME` — registry target
+- `AZURE_RESOURCE_GROUP`, `AZURE_CONTAINER_APP_NAME` — deployment target
+- `VITE_API_BASE_URL` — frontend API endpoint (or empty for same-origin)
+
+### Local Docker
+
+Build:
+```bash
+docker build -t pricewatch .
+```
+
+Run:
+```bash
+docker run -p 3000:3000 \
+  -e API_KEY=test \
+  -e SCRAPE_DO_TOKEN=your-token \
+  -e TURSO_URL=libsql://... \
+  -e TURSO_TOKEN=... \
+  pricewatch
+```
+
+Open `http://localhost:3000`.
+
+### Single container design
 
 The container build:
 
