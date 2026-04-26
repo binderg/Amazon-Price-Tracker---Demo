@@ -5,7 +5,7 @@
  * and a link to the Amazon listing. Opened by clicking "History" on a card.
  */
 
-import { useState } from "react";
+
 import { Dialog } from "primereact/dialog";
 import {
   TrendingDown,
@@ -17,13 +17,6 @@ import {
 } from "lucide-react";
 import { formatPrice } from "../../api/mockData";
 import PriceHistoryChart from "./PriceHistoryChart";
-
-const RANGE_OPTIONS = [
-  { label: "7d", value: "7d" },
-  { label: "14d", value: "14d" },
-  { label: "30d", value: "30d" },
-  { label: "60d", value: "60d" },
-];
 
 function StatRow({ label, value, highlight }) {
   return (
@@ -46,7 +39,6 @@ function StatRow({ label, value, highlight }) {
  * }} props
  */
 export default function ProductDetailModal({ product, visible, onHide }) {
-  const [range, setRange] = useState("7d");
 
   if (!product) return null;
 
@@ -99,31 +91,13 @@ export default function ProductDetailModal({ product, visible, onHide }) {
     >
       <div className="flex flex-col gap-6">
         {/* Range selector + chart */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-slate-600">Price History</p>
-            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-              {RANGE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setRange(opt.value)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-                    range === opt.value
-                      ? "bg-white text-slate-800 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+          <div>
+            <p className="text-sm font-medium text-slate-600 mb-3">Price History</p>
+            <PriceHistoryChart
+              history={priceHistory}
+              currentPrice={currentPrice}
+            />
           </div>
-          <PriceHistoryChart
-            history={priceHistory}
-            currentPrice={currentPrice}
-            range={range}
-          />
-        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {/* Price stats */}

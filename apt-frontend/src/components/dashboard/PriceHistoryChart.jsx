@@ -50,13 +50,10 @@ function CustomDot(props) {
  * @param {{
  *   history: { date: string; price: number; timestamp?: string }[];
  *   currentPrice: number;
- *   range: '7d' | '14d' | '30d' | '60d';
  * }} props
  */
-export default function PriceHistoryChart({ history = [], currentPrice, range = '30d' }) {
-  const daysMap = { '7d': 7, '14d': 14, '30d': 30, '60d': 60 }
-  const days = daysMap[range] ?? 30
-  const slice = history.slice(-days)
+export default function PriceHistoryChart({ history = [], currentPrice }) {
+  const slice = history
 
   if (slice.length < 2) {
     return (

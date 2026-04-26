@@ -25,13 +25,6 @@ import { shortDate, fullDateTime } from '../utils/time'
 // One colour per slot — consistent regardless of which products are selected
 const SLOT_COLORS = ['#3b82f6', '#10b981', '#8b5cf6']
 
-const RANGE_OPTIONS = [
-  { label: '7d',  value: 7  },
-  { label: '14d', value: 14 },
-  { label: '30d', value: 30 },
-  { label: '60d', value: 60 },
-]
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
@@ -115,7 +108,7 @@ function ComparisonTooltip({ active, payload, label, productMap }) {
  * @param {{ products: object[] }} props
  */
 export default function ComparisonChart({ products = [] }) {
-  const [rangeDays, setRangeDays] = useState(7)
+  const rangeDays = 7
 
   // Default: all active products selected
   const [selectedAsins, setSelectedAsins] = useState(() =>
@@ -201,22 +194,7 @@ export default function ComparisonChart({ products = [] }) {
             selectAllLabel="All products"
           />
 
-          {/* Range toggle */}
-          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-            {RANGE_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setRangeDays(opt.value)}
-                className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-                  rangeDays === opt.value
-                    ? 'bg-white text-slate-800 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+
         </div>
       </div>
 
