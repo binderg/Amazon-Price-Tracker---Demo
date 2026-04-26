@@ -10,7 +10,7 @@ env:
   IMAGE_NAME: ${{ vars.IMAGE_NAME }}
   RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
   CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME }}
-  IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/${{ vars.IMAGE_NAME }}:latest
+  IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/${{ vars.IMAGE_NAME }}:${{ github.sha }}
 
 jobs:
   build-and-push:
