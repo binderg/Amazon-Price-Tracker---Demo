@@ -10,6 +10,7 @@ env:
   IMAGE_NAME: ${{ vars.IMAGE_NAME }}
   RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
   CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME }}
+  CONTAINER_APP_ENV: ${{ vars.AZURE_CONTAINER_APP_ENV }}
   IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/${{ vars.IMAGE_NAME }}:latest
 
 jobs:
@@ -54,6 +55,7 @@ jobs:
         run: |
           test -n "${{ vars.AZURE_RESOURCE_GROUP }}" || (echo "Missing AZURE_RESOURCE_GROUP" && exit 1)
           test -n "${{ vars.AZURE_CONTAINER_APP_NAME }}" || (echo "Missing AZURE_CONTAINER_APP_NAME" && exit 1)
+          test -n "${{ vars.AZURE_CONTAINER_APP_ENV }}" || (echo "Missing AZURE_CONTAINER_APP_ENV" && exit 1)
           test -n "${{ secrets.AZURE_CREDENTIALS }}" || (echo "Missing AZURE_CREDENTIALS" && exit 1)
           test -n "${{ secrets.TURSO_URL }}" || (echo "Missing TURSO_URL" && exit 1)
           test -n "${{ secrets.TURSO_TOKEN }}" || (echo "Missing TURSO_TOKEN" && exit 1)
@@ -77,6 +79,24 @@ jobs:
               --name "${{ env.CONTAINER_APP_NAME }}" \
               --resource-group "${{ env.RESOURCE_GROUP }}" \
               --image "${{ env.IMAGE }}" \
+              --min-replicas 1 \
+              --max-replicas 1 \
               --set-env-vars \
+                "TURSO_URL=${{ secrets.TURSO_URL }}" \
+                "TURSO_TOKEN=${{ secrets.TURSO_TOKEN }}" \
+            || \
+            az containerapp create \
+              --name "${{ env.CONTAINER_APP_NAME }}" \
+              --resource-group "${{ env.RESOURCE_GROUP }}" \
+              --environment "${{ env.CONTAINER_APP_ENV }}" \
+              --image "${{ env.IMAGE }}" \
+              --registry-server "${{ env.REGISTRY }}" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --target-port 3000 \
+              --ingress external \
+              --min-replicas 1 \
+              --max-replicas 1 \
+              --env-vars \
                 "TURSO_URL=${{ secrets.TURSO_URL }}" \
                 "TURSO_TOKEN=${{ secrets.TURSO_TOKEN }}"
