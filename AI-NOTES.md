@@ -13,5 +13,3 @@ I used perplexity to search the web for this seemingly common bug and the final 
 - set `idleTimeout: 0` as a global fallback
 - send keepalive pings every 8 seconds
 - add frontend reconnect backoff so the UI recovers after restarts
-
-The lesson was straightforward: the AI helped move quickly, but the logs were the source of truth. The fix only became correct once I validated the runtime behavior directly instead of accepting the first plausible explanation.
