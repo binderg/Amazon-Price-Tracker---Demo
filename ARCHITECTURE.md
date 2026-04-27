@@ -212,5 +212,4 @@ Not fully handled:
 
 - duplicate notifications from concurrent workers
 - upstream service outages beyond logging and retry-on-next-cycle behavior
-- a manual `POST /api/check` trigger endpoint is not yet implemented
 - full automated tests are not yet implemented

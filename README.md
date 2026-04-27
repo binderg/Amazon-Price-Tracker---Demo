@@ -376,7 +376,6 @@ This channel was chosen because it is immediately verifiable by a reviewer witho
 
 - **No out-of-band notifications.** Alerts are in-app only. If the dashboard is closed, the user does not receive the notification until they next open it. Adding email or webhook delivery would require an additional outbound integration.
 - **No duplicate-notification guard.** If two scheduler ticks overlapped (not possible in the current single-process design, but relevant at scale), duplicate `price_drop_events` rows could be written. A transactional idempotency key or advisory lock would fix this.
-- **Turso (libSQL) is SQLite-compatible but async.** All database calls use `await db.execute()`. The schema and queries are otherwise identical to local SQLite.
 - **Scrape.do dependency.** All scraping goes through a paid third-party API. If the service is unavailable or the token quota is exhausted, scrapes fail gracefully (logged, scheduler continues) but no price data is collected.
 - **No retry/backoff for failed scrapes.** A failed scrape is logged and skipped; it is retried at the next scheduled interval. There is no exponential backoff or dead-letter queue for persistent failures.
 - **3-slot product limit is driven by the Scrape.do free tier.** The backend schema supports any number of tracked products, but each price check consumes a Scrape.do API credit. The free tier quota makes tracking more than a few products impractical. Expanding the slot count is a UI change, but doing so on a free tier would exhaust credits quickly.
