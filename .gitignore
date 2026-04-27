@@ -38,3 +38,5 @@ lerna-debug.log*
 #db
 apt-backend/data/apt.db-shm
 apt-backend/data/apt.db-wal
+
+todo.md
