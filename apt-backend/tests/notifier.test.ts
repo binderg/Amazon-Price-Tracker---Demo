@@ -54,6 +54,7 @@ function add(stream: SSEStreamingApi) {
 
 beforeEach(() => {
   registered = [];
+  process.env.SCRAPE_DO_TOKEN = "test-token";
 });
 
 afterEach(() => {
